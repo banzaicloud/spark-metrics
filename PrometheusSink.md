@@ -39,7 +39,7 @@ Add the following lines to metrics configuartion file:
 --repositories https://raw.github.com/banzaicloud/spark-metrics/master/maven-repo/releases
 ```
 
-_**Note**_: this is a maven repo hosted on github
+_**Note**_: this is a maven repo hosted on GitHub
 
 Also we have to specify the spark-metrics package that includes PromethusSink and it's dependendent packages for `spark-submit`:
 
@@ -50,3 +50,5 @@ Also we have to specify the spark-metrics package that includes PromethusSink an
 ## Package version
 
 The version number of the package is formatted as: `com.banzaicloud:spark-metrics_<scala version>:<spark version>-<version>`
+
+
