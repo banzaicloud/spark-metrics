@@ -1,20 +1,24 @@
-# Prometheus sink
+### Monitor Apache Spark with Prometheus the `alternative` way
+
+We have externalized the sink into a separate library thus you can use this by either building for yourself or take it from our Maven repository.
+
+#### Prometheus sink
 
 PrometheusSink is a Spark metrics [sink](https://spark.apache.org/docs/2.2.0/monitoring.html#metrics) that publishes spark metrics into [Prometheus](https://prometheus.io). 
 
-## Prerequisites
+#### Prerequisites
 
-Prometheus uses a **pull** model over http to scrape data from the applications. For batch jobs it also supports a **push** model. We need to use this model as Spark pushes metrics to sink. In order to enable this feature for Prometheus a special component called [pushgateway](https://github.com/prometheus/pushgateway) needs to be running.
+Prometheus uses a **pull** model over http to scrape data from the applications. For batch jobs it also supports a **push** model. We need to use this model as Spark pushes metrics to sinks. In order to enable this feature for Prometheus a special component called [pushgateway](https://github.com/prometheus/pushgateway) needs to be running.
 
-## How to enable PrometheusSink in Spark
+#### How to enable PrometheusSink in Spark
 
-Spark publishes metrics to Sinks listed in the metrics configuration file. The localtion of the metrics configuration file can be specified for `spark-submit` as follows:
+Spark publishes metrics to Sinks listed in the metrics configuration file. The location of the metrics configuration file can be specified for `spark-submit` as follows:
 
 ```sh
 --conf spark.metrics.conf=<path_to_the_file>/metrics.properties
 ```
 
-Add the following lines to metrics configuartion file:
+Add the following lines to metrics configuration file:
 
 ```sh
 # Enable Prometheus for all instances by class name
@@ -41,14 +45,16 @@ Add the following lines to metrics configuartion file:
 
 _**Note**_: this is a maven repo hosted on GitHub
 
-Also we have to specify the spark-metrics package that includes PromethusSink and it's dependendent packages for `spark-submit`:
+Also we have to specify the spark-metrics package that includes PromethusSink and it's dependent packages for `spark-submit`:
 
 ```sh
 --packages com.banzaicloud:spark-metrics_2.11:2.2.1-1.0.0,io.prometheus:simpleclient:0.0.23,io.prometheus:simpleclient_dropwizard:0.0.23,io.prometheus:simpleclient_pushgateway:0.0.23,io.dropwizard.metrics:metrics-core:3.1.2
 ```
 
-## Package version
+#### Package version
 
 The version number of the package is formatted as: `com.banzaicloud:spark-metrics_<scala version>:<spark version>-<version>`
 
+### Conclusion 
 
+This is not the ideal scenario but it perfectly does the job and it's independent of Spark core. At [Banzai Cloud](https://banzaicloud.com) we are **willing to contribute** this sink once the community decided that it actually needs it. Meanwhile you can open a new feature requests, use this existing PR or use any other means to ask for `native` Prometheus support and let us know through one of our social channels. As usual, we are happy to help. All we create is open source and at the same time all we consume is open source as well - so we are always eager to make open source projects better. 
