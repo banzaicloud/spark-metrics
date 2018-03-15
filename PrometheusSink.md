@@ -45,7 +45,7 @@ Add the following lines to metrics configuration file:
 
 _**Note**_: this is a maven repo hosted on GitHub
 
-Also we have to specify the spark-metrics package that includes PromethusSink and it's dependent packages for `spark-submit`:
+Also we have to specify the spark-metrics package that includes PrometheusSink and it's dependent packages for `spark-submit`:
 
 ```sh
 --packages com.banzaicloud:spark-metrics_2.11:2.2.1-1.0.0,io.prometheus:simpleclient:0.0.23,io.prometheus:simpleclient_dropwizard:0.0.23,io.prometheus:simpleclient_pushgateway:0.0.23,io.dropwizard.metrics:metrics-core:3.1.2
