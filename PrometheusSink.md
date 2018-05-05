@@ -15,7 +15,7 @@ Prometheus uses a **pull** model over http to scrape data from the applications.
 Spark publishes metrics to Sinks listed in the metrics configuration file. The location of the metrics configuration file can be specified for `spark-submit` as follows:
 
 ```sh
---conf spark.metrics.conf=<path_to_the_file>/metrics.properties
+--conf spark.metrics.conf=<path_to_the_metrics_properties_file>
 ```
 
 Add the following lines to metrics configuration file:
@@ -46,10 +46,27 @@ Add the following lines to metrics configuration file:
 _**Note**_: this is a maven repo hosted on GitHub
 
 Also we have to specify the spark-metrics package that includes PrometheusSink and it's dependent packages for `spark-submit`:
+*  Spark 2.2:
 
 ```sh
 --packages com.banzaicloud:spark-metrics_2.11:2.2.1-1.0.0,io.prometheus:simpleclient:0.0.23,io.prometheus:simpleclient_dropwizard:0.0.23,io.prometheus:simpleclient_pushgateway:0.0.23,io.dropwizard.metrics:metrics-core:3.1.2
 ```
+
+* Spark 2.3:
+
+```sh
+--packages com.banzaicloud:spark-metrics_2.11:2.3-1.0.0,io.prometheus:simpleclient:0.3.0,io.prometheus:simpleclient_dropwizard:0.3.0,io.prometheus:simpleclient_pushgateway:0.3.0,io.dropwizard.metrics:metrics-core:3.1.2
+```
+_**Note**_: the `--packages` option currently is not supported by _**Spark 2.3 when running on Kubernetes**_. The reason is that the `--packages` option behind the scenes downloads the files from maven repo to local machines than uploads these to the cluster using _Local File Dependency Management_ feature. This feature has not been backported from the _**Spark 2.2 on Kubernetes**_ fork to _**Spark 2.3**_. See details here: [Spark 2.3 Future work](https://spark.apache.org/docs/latest/running-on-kubernetes.html#future-work). This can be worked around by:
+1. building ourselves [Spark 2.3 with Kubernetes support](https://spark.apache.org/docs/latest/building-spark.html#building-with-kubernetes-support) from source
+1. downloading and adding the following jars to `assembly/target/scala-2.11/jars`:
+   1. com.banzaicloud:spark-metrics_2.11:2.3-1.0.0
+   1. io.prometheus:simpleclient:0.3.0
+   1. io.prometheus:simpleclient_common:0.3.0
+   1. io.prometheus:simpleclient_dropwizard:0.3.0
+   1. io.prometheus:simpleclient_pushgateway:0.3.0
+   1. io.dropwizard.metrics:metrics-core:3.1.2
+1. building [Spark docker images for Kubernetes](https://spark.apache.org/docs/latest/running-on-kubernetes.html#docker-images)  
 
 #### Package version
 
