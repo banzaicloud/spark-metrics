@@ -26,6 +26,7 @@ import com.codahale.metrics._
 import io.prometheus.client.CollectorRegistry
 import io.prometheus.client.dropwizard.DropwizardExports
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.METRICS_NAMESPACE
 import org.apache.spark.metrics.sink.Sink
 import org.apache.spark.{SecurityManager, SparkConf, SparkEnv}
 
@@ -60,7 +61,8 @@ class PrometheusSink(
       // SparkConf from spark env here and not during the creation/initialisation of PrometheusSink.
       val sparkConf: SparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(defaultSparkConf)
 
-      val metricsNamespace: Option[String] = sparkConf.getOption("spark.metrics.namespace")
+
+      val metricsNamespace: Option[String] = sparkConf.get(METRICS_NAMESPACE)
       val sparkAppId: Option[String] = sparkConf.getOption("spark.app.id")
       val executorId: Option[String] = sparkConf.getOption("spark.executor.id")
 
