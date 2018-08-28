@@ -83,13 +83,13 @@ class PrometheusSink(
         case _ => metricsNamespace.getOrElse("shuffle")
       }
 
-      val instance: String = ""
+      val instance: String = sparkAppId.getOrElse("")
 
       logInfo(s"role=$role, job=$job")
 
       val groupingKey: Map[String, String] = (role, executorId) match {
-        case ("driver", _) => Map("role" -> role, "instance" -> sparkAppId.getOrElse(""))
-        case ("executor", Some(id)) => Map ("role" -> role, "number" -> id, "instance" -> sparkAppId.getOrElse(""))
+        case ("driver", _) => Map("role" -> role, "instance" -> instance)
+        case ("executor", Some(id)) => Map ("role" -> role, "number" -> id, "instance" -> instance)
         case _ => Map("role" -> role)
       }
 

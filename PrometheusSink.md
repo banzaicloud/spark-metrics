@@ -31,7 +31,7 @@ Add the following lines to metrics configuration file:
 *.sink.prometheus.pushgateway-enable-timestamp=<enable/disable metrics timestamp> - defaults to false
 # Metrics name processing (version 2.3-1.1.0 +)
 *.sink.prometheus.metrics-name-capture-regex=<regular expression to capture sections metric name sections to be replaces>
-*.sink.prometheus.metrics-name-replacement=<replacment captured sections to be replaced with>
+*.sink.prometheus.metrics-name-replacement=<replacement captured sections to be replaced with>
 ```
 
 * **pushgateway-address-protocol** - the scheme of the URL where pushgateway service is available
