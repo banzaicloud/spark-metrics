@@ -22,6 +22,7 @@ import java.util.Properties
 import java.util.concurrent.TimeUnit
 
 import com.banzaicloud.metrics.prometheus.client.exporter.PushGatewayWithTimestamp
+import com.banzaicloud.spark.metrics.DropwizardExportsWithMetricNameCaptureAndReplace
 import com.codahale.metrics._
 import io.prometheus.client.CollectorRegistry
 import io.prometheus.client.dropwizard.DropwizardExports
@@ -32,6 +33,7 @@ import org.apache.spark.{SecurityManager, SparkConf, SparkEnv}
 
 import scala.collection.JavaConverters._
 import scala.util.Try
+import scala.util.matching.Regex
 
 
 class PrometheusSink(
@@ -80,11 +82,14 @@ class PrometheusSink(
         case "executor" => metricsNamespace.getOrElse(sparkAppId.get)
         case _ => metricsNamespace.getOrElse("shuffle")
       }
+
+      val instance: String = ""
+
       logInfo(s"role=$role, job=$job")
 
       val groupingKey: Map[String, String] = (role, executorId) match {
-        case ("driver", _) => Map("role" -> role)
-        case ("executor", Some(id)) => Map ("role" -> role, "number" -> id)
+        case ("driver", _) => Map("role" -> role, "instance" -> sparkAppId.getOrElse(""))
+        case ("executor", Some(id)) => Map ("role" -> role, "number" -> id, "instance" -> sparkAppId.getOrElse(""))
         case _ => Map("role" -> role)
       }
 
@@ -105,6 +110,10 @@ class PrometheusSink(
   val KEY_PUSHGATEWAY_ADDRESS = "pushgateway-address"
   val KEY_PUSHGATEWAY_ADDRESS_PROTOCOL = "pushgateway-address-protocol"
   val KEY_PUSHGATEWAY_ENABLE_TIMESTAMP = "pushgateway-enable-timestamp"
+
+  // metrics name replacement
+  val KEY_METRICS_NAME_CAPTURE_REGEX = "metrics-name-capture-regex"
+  val KEY_METRICS_NAME_REPLACEMENT = "metrics-name-replacement"
 
 
   val pollPeriod: Int =
@@ -130,8 +139,21 @@ class PrometheusSink(
       .map(_.toBoolean)
       .getOrElse(PUSHGATEWAY_ENABLE_TIMESTAMP)
 
+  val metricsNameCaptureRegex: Option[Regex] =
+    Option(property.getProperty(KEY_METRICS_NAME_CAPTURE_REGEX))
+      .map(new Regex(_))
+
+  val metricsNameReplacement: String =
+    Option(property.getProperty(KEY_METRICS_NAME_REPLACEMENT))
+        .getOrElse("")
+
   // validate pushgateway host:port
   Try(new URI(s"$pushGatewayAddressProtocol://$pushGatewayAddress")).get
+
+  // validate metrics name capture regex
+  if (metricsNameCaptureRegex.isDefined && metricsNameReplacement == "") {
+    throw new IllegalArgumentException("Metrics name replacement must be specified if metrics name capture regexp is set !")
+  }
 
   checkMinimalPollingPeriod(pollUnit, pollPeriod)
 
@@ -140,9 +162,16 @@ class PrometheusSink(
   logInfo(s"Metrics timestamp enabled -> $enableTimestamp")
   logInfo(s"$KEY_PUSHGATEWAY_ADDRESS -> $pushGatewayAddress")
   logInfo(s"$KEY_PUSHGATEWAY_ADDRESS_PROTOCOL -> $pushGatewayAddressProtocol")
+  logInfo(s"$KEY_METRICS_NAME_CAPTURE_REGEX -> ${metricsNameCaptureRegex.getOrElse("")}")
+  logInfo(s"$KEY_METRICS_NAME_REPLACEMENT -> $metricsNameReplacement")
 
-  val pushRegistry: CollectorRegistry = new CollectorRegistry()
-  val sparkMetricExports: DropwizardExports = new DropwizardExports(registry)
+  val pushRegistry: CollectorRegistry = CollectorRegistry.defaultRegistry
+
+  val sparkMetricExports: DropwizardExports = metricsNameCaptureRegex match {
+    case Some(r) => new DropwizardExportsWithMetricNameCaptureAndReplace(r, metricsNameReplacement, registry)
+    case _ => new DropwizardExports(registry)
+  }
+
   val pushGateway: PushGatewayWithTimestamp =
     new PushGatewayWithTimestamp(s"$pushGatewayAddressProtocol://$pushGatewayAddress")
 

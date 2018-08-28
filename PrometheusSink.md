@@ -29,6 +29,9 @@ Add the following lines to metrics configuration file:
 *.sink.prometheus.period=<period> - defaults to 10
 *.sink.prometheus.unit=< unit> - defaults to seconds (TimeUnit.SECONDS)
 *.sink.prometheus.pushgateway-enable-timestamp=<enable/disable metrics timestamp> - defaults to false
+# Metrics name processing (version 2.3-1.1.0 +)
+*.sink.prometheus.metrics-name-capture-regex=<regular expression to capture sections metric name sections to be replaces>
+*.sink.prometheus.metrics-name-replacement=<replacment captured sections to be replaced with>
 ```
 
 * **pushgateway-address-protocol** - the scheme of the URL where pushgateway service is available
@@ -36,6 +39,9 @@ Add the following lines to metrics configuration file:
 * **period** - controls the periodicity of metrics being sent to pushgateway
 * **unit** - the time unit of the periodicity
 * **pushgateway-enable-timestamp** - controls whether to send the timestamp of the metrics sent to pushgateway. This is disabled by default as **not all** versions of pushgateway support timestamp for metrics.
+* **metrics-name-capture-regex** - if provided than this regexp is applied on each metric name prior sending to Prometheus. The metric name sections captured(regexp groups) will be replaced with the value passed in `metrics-name-replacement`.
+e.g. `(.*driver_)(.+)`. *Supported only in version **2.3-1.1.0 and above**.*
+* **metrics-name-replacement** - the replacement to replace captured sections(regexp groups) metric name. e.g. `${2}`. *Supported only in version **2.3-1.1.0 and above**.*
 
 `spark-submit` needs to know repository where to download the `jar` containing PrometheusSink from:
 
