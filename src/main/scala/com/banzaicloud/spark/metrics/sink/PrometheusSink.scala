@@ -66,9 +66,10 @@ class PrometheusSink(
 
       val metricsNamespace: Option[String] = sparkConf.get(METRICS_NAMESPACE)
       val sparkAppId: Option[String] = sparkConf.getOption("spark.app.id")
+      val sparkAppName: Option[String] = sparkConf.getOption("spark.app.name")
       val executorId: Option[String] = sparkConf.getOption("spark.executor.id")
 
-      logInfo(s"metricsNamespace=$metricsNamespace, sparkAppId=$sparkAppId, " +
+      logInfo(s"metricsNamespace=$metricsNamespace, sparkAppName=$sparkAppName, sparkAppId=$sparkAppId, " +
         s"executorId=$executorId")
 
       val role: String = (sparkAppId, executorId) match {
@@ -84,12 +85,16 @@ class PrometheusSink(
       }
 
       val instance: String = sparkAppId.getOrElse("")
+      val appName: String = sparkAppName.getOrElse("")
 
       logInfo(s"role=$role, job=$job")
 
       val groupingKey: Map[String, String] = (role, executorId) match {
-        case ("driver", _) => Map("role" -> role, "instance" -> instance)
-        case ("executor", Some(id)) => Map ("role" -> role, "number" -> id, "instance" -> instance)
+        case ("driver", _) => Map("role" -> role, "app_name" -> appName, "instance" -> instance)
+        case ("executor", Some(id)) => Map ("role" -> role,
+          "number" -> id,
+          "app_name" -> appName,
+          "instance" -> instance)
         case _ => Map("role" -> role)
       }
 
