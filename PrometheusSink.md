@@ -32,6 +32,7 @@ Add the following lines to metrics configuration file:
 # Metrics name processing (version 2.3-1.1.0 +)
 *.sink.prometheus.metrics-name-capture-regex=<regular expression to capture sections metric name sections to be replaces>
 *.sink.prometheus.metrics-name-replacement=<replacement captured sections to be replaced with>
+*.sink.prometheus.labels=<labels in label=value format separated by comma>
 ```
 
 * **pushgateway-address-protocol** - the scheme of the URL where pushgateway service is available
@@ -42,6 +43,7 @@ Add the following lines to metrics configuration file:
 * **metrics-name-capture-regex** - if provided than this regexp is applied on each metric name prior sending to Prometheus. The metric name sections captured(regexp groups) will be replaced with the value passed in `metrics-name-replacement`.
 e.g. `(.*driver_)(.+)`. *Supported only in version **2.3-1.1.0 and above**.*
 * **metrics-name-replacement** - the replacement to replace captured sections(regexp groups) metric name. e.g. `${2}`. *Supported only in version **2.3-1.1.0 and above**.*
+* **labels** - the list of labels to be passed to Prometheus with each metrics in addition to the default ones. This must be specified in the format label=value sperated by comma. *Supported only in version **2.3-1.1.0 and above**.* 
 
 `spark-submit` needs to know repository where to download the `jar` containing PrometheusSink from:
 

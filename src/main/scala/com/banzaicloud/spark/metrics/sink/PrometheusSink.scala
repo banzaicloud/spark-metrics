@@ -32,7 +32,7 @@ import org.apache.spark.metrics.sink.Sink
 import org.apache.spark.{SecurityManager, SparkConf, SparkEnv}
 
 import scala.collection.JavaConverters._
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 import scala.util.matching.Regex
 
 
@@ -41,6 +41,8 @@ class PrometheusSink(
                       val registry: MetricRegistry,
                       securityMgr: SecurityManager)
   extends Sink with Logging {
+
+  private val lbv = raw"(.+)\s*=\s*(.*)".r
 
   protected class Reporter(registry: MetricRegistry)
     extends ScheduledReporter(
@@ -90,11 +92,26 @@ class PrometheusSink(
       logInfo(s"role=$role, job=$job")
 
       val groupingKey: Map[String, String] = (role, executorId) match {
-        case ("driver", _) => Map("role" -> role, "app_name" -> appName, "instance" -> instance)
-        case ("executor", Some(id)) => Map ("role" -> role,
-          "number" -> id,
-          "app_name" -> appName,
-          "instance" -> instance)
+        case ("driver", _) =>
+          labelsMap match {
+            case Some(m) => Map("role" -> role, "app_name" -> appName, "instance" -> instance) ++ m
+            case _ => Map("role" -> role, "app_name" -> appName, "instance" -> instance)
+          }
+
+        case ("executor", Some(id)) =>
+          labelsMap match {
+            case Some(m) =>
+              Map ("role" -> role,
+                "number" -> id,
+                "app_name" -> appName,
+                "instance" -> instance) ++ m
+            case _ =>
+              Map ("role" -> role,
+              "number" -> id,
+              "app_name" -> appName,
+              "instance" -> instance)
+          }
+
         case _ => Map("role" -> role)
       }
 
@@ -120,6 +137,8 @@ class PrometheusSink(
   val KEY_METRICS_NAME_CAPTURE_REGEX = "metrics-name-capture-regex"
   val KEY_METRICS_NAME_REPLACEMENT = "metrics-name-replacement"
 
+ // labels
+ val KEY_LABELS = "labels"
 
   val pollPeriod: Int =
     Option(property.getProperty(KEY_PUSH_PERIOD))
@@ -160,6 +179,18 @@ class PrometheusSink(
     throw new IllegalArgumentException("Metrics name replacement must be specified if metrics name capture regexp is set !")
   }
 
+  // parse labels
+  val labels: Option[Try[Map[String, String]]]  =
+    Option(property.getProperty(KEY_LABELS))
+      .map(parseLabels)
+
+  val labelsMap = labels match {
+    case Some(Success(labelsMap)) => Some(labelsMap)
+    case Some(Failure(err)) => throw err
+    case _ => None
+  }
+
+
   checkMinimalPollingPeriod(pollUnit, pollPeriod)
 
   logInfo("Initializing Prometheus Sink...")
@@ -169,6 +200,7 @@ class PrometheusSink(
   logInfo(s"$KEY_PUSHGATEWAY_ADDRESS_PROTOCOL -> $pushGatewayAddressProtocol")
   logInfo(s"$KEY_METRICS_NAME_CAPTURE_REGEX -> ${metricsNameCaptureRegex.getOrElse("")}")
   logInfo(s"$KEY_METRICS_NAME_REPLACEMENT -> $metricsNameReplacement")
+  logInfo(s"$KEY_LABELS -> ${labelsMap.getOrElse("")}")
 
   val pushRegistry: CollectorRegistry = CollectorRegistry.defaultRegistry
 
@@ -202,5 +234,21 @@ class PrometheusSink(
       throw new IllegalArgumentException("Polling period " + pollPeriod + " " + pollUnit +
         " below than minimal polling period ")
     }
+  }
+
+  private def parseLabel(label: String): (String, String) = {
+    label match {
+      case lbv(label, value) => (DropwizardExports.sanitizeMetricName(label), value)
+      case _ =>
+        throw new IllegalArgumentException("Can not parse labels ! Labels should be in label=value separated by commas format.")
+    }
+  }
+
+
+  private def parseLabels(labels: String): Try[Map[String, String]] = {
+    val kvs = labels.split(',')
+    val parsedLabels = Try(kvs.map(parseLabel).toMap)
+
+    parsedLabels
   }
 }
