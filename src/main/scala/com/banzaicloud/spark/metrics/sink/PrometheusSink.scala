@@ -134,7 +134,7 @@ class PrometheusSink(
   val KEY_PUSHGATEWAY_ADDRESS = "pushgateway-address"
   val KEY_PUSHGATEWAY_ADDRESS_PROTOCOL = "pushgateway-address-protocol"
   val KEY_PUSHGATEWAY_ENABLE_TIMESTAMP = "pushgateway-enable-timestamp"
-  val DEFAULT_KEY_JMX_COLLECTOR_CONFIG: String = "/opt/spark/conf/jmx_collector.yaml"
+  val DEFAULT_KEY_JMX_COLLECTOR_CONFIG = "/opt/spark/conf/jmx_collector.yaml"
 
   // metrics name replacement
   val KEY_METRICS_NAME_CAPTURE_REGEX = "metrics-name-capture-regex"
