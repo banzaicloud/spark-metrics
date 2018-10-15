@@ -16,6 +16,7 @@
  */
 package com.banzaicloud.spark.metrics.sink
 
+import java.io.File
 import java.net.URI
 import java.util
 import java.util.Properties
@@ -28,6 +29,7 @@ import io.prometheus.client.CollectorRegistry
 import io.prometheus.client.dropwizard.DropwizardExports
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.METRICS_NAMESPACE
+import io.prometheus.jmx.JmxCollector
 import org.apache.spark.metrics.sink.Sink
 import org.apache.spark.{SecurityManager, SparkConf, SparkEnv}
 
@@ -132,10 +134,15 @@ class PrometheusSink(
   val KEY_PUSHGATEWAY_ADDRESS = "pushgateway-address"
   val KEY_PUSHGATEWAY_ADDRESS_PROTOCOL = "pushgateway-address-protocol"
   val KEY_PUSHGATEWAY_ENABLE_TIMESTAMP = "pushgateway-enable-timestamp"
+  val DEFAULT_KEY_JMX_COLLECTOR_CONFIG = "/opt/spark/conf/jmx_collector.yaml"
 
   // metrics name replacement
   val KEY_METRICS_NAME_CAPTURE_REGEX = "metrics-name-capture-regex"
   val KEY_METRICS_NAME_REPLACEMENT = "metrics-name-replacement"
+
+  val KEY_ENABLE_DROPWIZARD_COLLECTOR = "enable-dropwizard-collector"
+  val KEY_ENABLE_JMX_COLLECTOR = "enable-jmx-collector"
+  val KEY_JMX_COLLECTOR_CONFIG = "jmx-collector-config"
 
  // labels
  val KEY_LABELS = "labels"
@@ -190,6 +197,17 @@ class PrometheusSink(
     case _ => None
   }
 
+  val enableDropwizardCollector: Boolean =
+    Option(property.getProperty(KEY_ENABLE_DROPWIZARD_COLLECTOR))
+      .map(_.toBoolean)
+      .getOrElse(true)
+  val enableJmxCollector: Boolean =
+    Option(property.getProperty(KEY_ENABLE_JMX_COLLECTOR))
+      .map(_.toBoolean)
+      .getOrElse(false)
+  val jmxCollectorConfig =
+    Option(property.getProperty(KEY_JMX_COLLECTOR_CONFIG))
+      .getOrElse(DEFAULT_KEY_JMX_COLLECTOR_CONFIG)
 
   checkMinimalPollingPeriod(pollUnit, pollPeriod)
 
@@ -201,6 +219,7 @@ class PrometheusSink(
   logInfo(s"$KEY_METRICS_NAME_CAPTURE_REGEX -> ${metricsNameCaptureRegex.getOrElse("")}")
   logInfo(s"$KEY_METRICS_NAME_REPLACEMENT -> $metricsNameReplacement")
   logInfo(s"$KEY_LABELS -> ${labelsMap.getOrElse("")}")
+  logInfo(s"$KEY_JMX_COLLECTOR_CONFIG -> $jmxCollectorConfig")
 
   val pushRegistry: CollectorRegistry = CollectorRegistry.defaultRegistry
 
@@ -209,19 +228,31 @@ class PrometheusSink(
     case _ => new DropwizardExports(registry)
   }
 
+  val jmxMetrics: JmxCollector = new JmxCollector(new File(jmxCollectorConfig))
+
   val pushGateway: PushGatewayWithTimestamp =
     new PushGatewayWithTimestamp(s"$pushGatewayAddressProtocol://$pushGatewayAddress")
 
   val reporter = new Reporter(registry)
 
   override def start(): Unit = {
-    sparkMetricExports.register(pushRegistry)
+    if (enableDropwizardCollector) {
+      sparkMetricExports.register(pushRegistry)
+    }
+    if (enableJmxCollector) {
+      jmxMetrics.register(pushRegistry)
+    }
     reporter.start(pollPeriod, pollUnit)
   }
 
   override def stop(): Unit = {
     reporter.stop()
-    pushRegistry.unregister(sparkMetricExports)
+    if (enableDropwizardCollector) {
+      pushRegistry.unregister(sparkMetricExports)
+    }
+    if (enableJmxCollector) {
+      pushRegistry.unregister(jmxMetrics)
+    }
   }
 
   override def report(): Unit = {

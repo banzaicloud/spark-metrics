@@ -11,6 +11,7 @@ lazy val root = (project in file("."))
       "io.dropwizard.metrics" % "metrics-core" % "3.1.2",
       "org.slf4j" % "slf4j-api" % "1.7.16",
       "com.google.guava" % "guava" % "14.0.1",
+      "io.prometheus.jmx" % "collector" % "0.10",
       "com.novocode" % "junit-interface" % "0.11" % Test
     )
   )
