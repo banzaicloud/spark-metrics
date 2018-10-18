@@ -33,6 +33,13 @@ Add the following lines to metrics configuration file:
 *.sink.prometheus.metrics-name-capture-regex=<regular expression to capture sections metric name sections to be replaces>
 *.sink.prometheus.metrics-name-replacement=<replacement captured sections to be replaced with>
 *.sink.prometheus.labels=<labels in label=value format separated by comma>
+# Support for JMX Collector (version 2.3-2.0.0 +)
+*.sink.prometheus.enable-dropwizard-collector=false
+*.sink.prometheus.enable-jmx-collector=true
+*.sink.prometheus.jmx-collector-config=/opt/spark/conf/monitoring/jmxCollector.yaml
+# Enable JVM metrics source for all instances by class name
+*.sink.jmx.class=org.apache.spark.metrics.sink.JmxSink
+*.source.jvm.class=org.apache.spark.metrics.source.JvmSource
 ```
 
 * **pushgateway-address-protocol** - the scheme of the URL where pushgateway service is available
@@ -44,6 +51,19 @@ Add the following lines to metrics configuration file:
 e.g. `(.*driver_)(.+)`. *Supported only in version **2.3-1.1.0 and above**.*
 * **metrics-name-replacement** - the replacement to replace captured sections(regexp groups) metric name. e.g. `${2}`. *Supported only in version **2.3-1.1.0 and above**.*
 * **labels** - the list of labels to be passed to Prometheus with each metrics in addition to the default ones. This must be specified in the format label=value sperated by comma. *Supported only in version **2.3-1.1.0 and above**.* 
+* **enable-dropwizard-collector** - from version 2.3-2.0.0 you can enable/disable dropwizard collector
+* **enable-jmx-collector** - from version 2.3-2.0.0 you can enable/disable JMX collector which collects configure metrics from JMX
+* **jmx-collector-config** - the location of jmx collector config file
+
+Example JMX collector configuration file:
+
+```sh
+    lowercaseOutputName: false
+    lowercaseOutputLabelNames: false
+    whitelistObjectNames: ["*:*"]
+```
+
+You can find more detailed description on this configuration file [here](https://github.com/prometheus/jmx_exporter).
 
 `spark-submit` needs to know repository where to download the `jar` containing PrometheusSink from:
 
