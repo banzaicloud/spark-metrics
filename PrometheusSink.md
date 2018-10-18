@@ -55,7 +55,7 @@ e.g. `(.*driver_)(.+)`. *Supported only in version **2.3-1.1.0 and above**.*
 * **enable-jmx-collector** - from version 2.3-2.0.0 you can enable/disable JMX collector which collects configure metrics from JMX
 * **jmx-collector-config** - the location of jmx collector config file
 
-Example JMX collectoe configuration file:
+Example JMX collector configuration file:
 
 ```sh
     lowercaseOutputName: false
