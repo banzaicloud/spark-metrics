@@ -52,7 +52,7 @@ class DropwizardExportsWithMetricNameCaptureAndReplace(
       mfs => new Collector.MetricFamilySamples(
         metricsNameCaptureRegex.replaceAllIn(mfs.name, replacement),
         mfs.`type`,
-        mfs.help,
+        "Generated from Dropwizard metric import",
         mfs.samples.asScala map {
           s => new MetricFamilySamples.Sample(
             metricsNameCaptureRegex.replaceAllIn(s.name, replacement),

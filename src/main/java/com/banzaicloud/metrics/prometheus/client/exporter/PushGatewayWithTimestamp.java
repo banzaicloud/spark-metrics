@@ -18,6 +18,7 @@ import io.prometheus.client.CollectorRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
@@ -25,10 +26,6 @@ import java.net.URL;
 import java.net.URLEncoder;
 import java.util.HashMap;
 import java.util.Map;
-
-import java.io.BufferedWriter;
-import java.io.IOException;
-import java.io.OutputStreamWriter;
 
 /**
  * Export metrics via the Prometheus Pushgateway.
@@ -229,13 +226,16 @@ public class PushGatewayWithTimestamp {
         connection.setConnectTimeout(10 * SECONDS_PER_MILLISECOND);
         connection.setReadTimeout(10 * SECONDS_PER_MILLISECOND);
 
+        OutputStream outputStream = null;
+
         try {
             connection.connect();
 
             if (!method.equals("DELETE")) {
+                outputStream = connection.getOutputStream();
                 BufferedWriter writer =
                         new BufferedWriter(
-                                new OutputStreamWriter(connection.getOutputStream(), "UTF-8"));
+                                new OutputStreamWriter(outputStream, "UTF-8"));
                 TextFormatWithTimestamp.write004(writer,
                         registry.metricFamilySamples(), timestamp);
                 writer.flush();
@@ -244,14 +244,58 @@ public class PushGatewayWithTimestamp {
 
             int response = connection.getResponseCode();
             if (response != HttpURLConnection.HTTP_ACCEPTED) {
+                logger.info("Error response from " + url);
+
+                String errMsg = readErrorStream(connection);
+                logger.info(errMsg);
+
                 throw new IOException("Response code from " + url + " was " + response);
             }
         } catch (Exception ex) {
             logger.error("Sending metrics failed due to: ", ex);
         }
         finally {
+            if (outputStream != null){
+                try {
+                    outputStream.close();
+                } finally {}
+            }
+
+            readErrorStream(connection);
+
             connection.disconnect();
         }
+    }
+
+    private String readErrorStream(HttpURLConnection connection) {
+        InputStream errorStream = null;
+        StringBuilder errorMsg = new StringBuilder();
+
+        try {
+            // read the response body off the error stream
+            if (connection.getErrorStream() != null) {
+                errorStream = new BufferedInputStream(connection.getErrorStream());
+                BufferedReader reader = new BufferedReader(new InputStreamReader(errorStream, "UTF-8"));
+                String inputLine = null;
+
+
+                while ((inputLine = reader.readLine()) != null) {
+                    errorMsg.append(inputLine);
+                }
+                reader.close();
+            }
+        } catch (IOException e) {}
+        finally {
+            // close the errorstream
+            if (errorStream != null) {
+                try {
+                    errorStream.close();
+                } catch (IOException e) {}
+                finally {}
+            }
+        }
+
+        return errorMsg.toString();
     }
 
     /**
