@@ -29,8 +29,8 @@ import collection.JavaConverters._
 /**
   * Exporter that converts DropWizard type metrics to Prometheus metrics while applies a regexp to change the name of
   * the metrics
-  * @param metricsNameCaptureRegex the regexp to capture metrics name parts to replace, e.g. (\w+)-(\w+)
-  * @param replacement the replacement string to replace the captured part of the metrics name with, e.g. ${1}/${2}
+  * @param metricsNameCaptureRegex the regexp to capture metrics name parts to replace, e.g. `(\w+)-(\w+)`
+  * @param replacement the replacement string to replace the captured part of the metrics name with, e.g. `\${1}/\${2}`
   * @param registry the metrics registry that holds all the DropWizard metrics
   */
 class DropwizardExportsWithMetricNameCaptureAndReplace(

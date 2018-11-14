@@ -223,12 +223,12 @@ class PrometheusSink(
 
   val pushRegistry: CollectorRegistry = CollectorRegistry.defaultRegistry
 
-  val sparkMetricExports: DropwizardExports = metricsNameCaptureRegex match {
+  lazy val sparkMetricExports: DropwizardExports = metricsNameCaptureRegex match {
     case Some(r) => new DropwizardExportsWithMetricNameCaptureAndReplace(r, metricsNameReplacement, registry)
     case _ => new DropwizardExports(registry)
   }
 
-  val jmxMetrics: JmxCollector = new JmxCollector(new File(jmxCollectorConfig))
+  lazy val jmxMetrics: JmxCollector = new JmxCollector(new File(jmxCollectorConfig))
 
   val pushGateway: PushGatewayWithTimestamp =
     new PushGatewayWithTimestamp(s"$pushGatewayAddressProtocol://$pushGatewayAddress")
