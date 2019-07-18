@@ -4,7 +4,7 @@ We have externalized the sink into a separate library thus you can use this by e
 
 #### Prometheus sink
 
-PrometheusSink is a Spark metrics [sink](https://spark.apache.org/docs/2.2.0/monitoring.html#metrics) that publishes spark metrics into [Prometheus](https://prometheus.io). 
+PrometheusSink is a Spark metrics [sink](https://spark.apache.org/docs/2.2.0/monitoring.html#metrics) that publishes spark metrics into [Prometheus](https://prometheus.io).
 
 #### Prerequisites
 
@@ -37,6 +37,10 @@ Add the following lines to metrics configuration file:
 *.sink.prometheus.enable-dropwizard-collector=false
 *.sink.prometheus.enable-jmx-collector=true
 *.sink.prometheus.jmx-collector-config=/opt/spark/conf/monitoring/jmxCollector.yaml
+
+# Enable HostName in Instance instead of Appid (Default value is false i.e. instance=${appid})
+*.sink.prometheus.enable-hostname-in-instance=true
+
 # Enable JVM metrics source for all instances by class name
 *.sink.jmx.class=org.apache.spark.metrics.sink.JmxSink
 *.source.jvm.class=org.apache.spark.metrics.source.JvmSource
@@ -50,7 +54,7 @@ Add the following lines to metrics configuration file:
 * **metrics-name-capture-regex** - if provided than this regexp is applied on each metric name prior sending to Prometheus. The metric name sections captured(regexp groups) will be replaced with the value passed in `metrics-name-replacement`.
 e.g. `(.*driver_)(.+)`. *Supported only in version **2.3-1.1.0 and above**.*
 * **metrics-name-replacement** - the replacement to replace captured sections(regexp groups) metric name. e.g. `${2}`. *Supported only in version **2.3-1.1.0 and above**.*
-* **labels** - the list of labels to be passed to Prometheus with each metrics in addition to the default ones. This must be specified in the format label=value sperated by comma. *Supported only in version **2.3-1.1.0 and above**.* 
+* **labels** - the list of labels to be passed to Prometheus with each metrics in addition to the default ones. This must be specified in the format label=value sperated by comma. *Supported only in version **2.3-1.1.0 and above**.*
 * **enable-dropwizard-collector** - from version 2.3-2.0.0 you can enable/disable dropwizard collector
 * **enable-jmx-collector** - from version 2.3-2.0.0 you can enable/disable JMX collector which collects configure metrics from JMX
 * **jmx-collector-config** - the location of jmx collector config file
@@ -88,7 +92,7 @@ Also we have to specify the spark-metrics package that includes PrometheusSink a
 _**Note**_: the `--packages` option currently is not supported by _**Spark 2.3 when running on Kubernetes**_. The reason is that the `--packages` option behind the scenes downloads the files from maven repo to local machines than uploads these to the cluster using _Local File Dependency Management_ feature. This feature has not been backported from the _**Spark 2.2 on Kubernetes**_ fork to _**Spark 2.3**_. See details here: [Spark 2.3 Future work](https://spark.apache.org/docs/latest/running-on-kubernetes.html#future-work). This can be worked around by:
 1. building ourselves [Spark 2.3 with Kubernetes support](https://spark.apache.org/docs/latest/building-spark.html#building-with-kubernetes-support) from source
 1. downloading and adding the dependencies to `assembly/target/scala-2.11/jars` folder, by running the following commands:
-    
+
    1. export SPARK_METRICS_VERSION=2.3-2.0.4
    1. mvn dependency:get -DremoteRepositories=https://raw.githubusercontent.com/banzaicloud/spark-metrics/${SPARK_METRICS_VERSION}/maven-repo/releases -DgroupId=com.banzaicloud -DartifactId=spark-metrics_2.11 -Dversion=${SPARK_METRICS_VERSION}
    1. mkdir temp
@@ -99,6 +103,6 @@ _**Note**_: the `--packages` option currently is not supported by _**Spark 2.3 w
 
 The version number of the package is formatted as: `com.banzaicloud:spark-metrics_<scala version>:<spark version>-<version>`
 
-### Conclusion 
+### Conclusion
 
-This is not the ideal scenario but it perfectly does the job and it's independent of Spark core. At [Banzai Cloud](https://banzaicloud.com) we are **willing to contribute** this sink once the community decided that it actually needs it. Meanwhile you can open a new feature requests, use this existing PR or use any other means to ask for `native` Prometheus support and let us know through one of our social channels. As usual, we are happy to help. All we create is open source and at the same time all we consume is open source as well - so we are always eager to make open source projects better. 
+This is not the ideal scenario but it perfectly does the job and it's independent of Spark core. At [Banzai Cloud](https://banzaicloud.com) we are **willing to contribute** this sink once the community decided that it actually needs it. Meanwhile you can open a new feature requests, use this existing PR or use any other means to ask for `native` Prometheus support and let us know through one of our social channels. As usual, we are happy to help. All we create is open source and at the same time all we consume is open source as well - so we are always eager to make open source projects better.
