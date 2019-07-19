@@ -17,7 +17,9 @@
 package com.banzaicloud.spark.metrics.sink
 
 import java.io.File
+import java.net.InetAddress
 import java.net.URI
+import java.net.UnknownHostException
 import java.util
 import java.util.Properties
 import java.util.concurrent.TimeUnit
@@ -56,6 +58,7 @@ class PrometheusSink(
 
     val defaultSparkConf: SparkConf = new SparkConf(true)
 
+    @throws(classOf[UnknownHostException])
     override def report(
                          gauges: util.SortedMap[String, Gauge[_]],
                          counters: util.SortedMap[String, Counter],
@@ -88,7 +91,8 @@ class PrometheusSink(
         case _ => metricsNamespace.getOrElse("shuffle")
       }
 
-      val instance: String = sparkAppId.getOrElse("")
+      val instance: String = if (enableHostNameInInstance) InetAddress.getLocalHost.getHostName else sparkAppId.getOrElse("")
+
       val appName: String = sparkAppName.getOrElse("")
 
       logInfo(s"role=$role, job=$job")
@@ -142,6 +146,7 @@ class PrometheusSink(
 
   val KEY_ENABLE_DROPWIZARD_COLLECTOR = "enable-dropwizard-collector"
   val KEY_ENABLE_JMX_COLLECTOR = "enable-jmx-collector"
+  val KEY_ENABLE_HOSTNAME_IN_INSTANCE = "enable-hostname-in-instance"
   val KEY_JMX_COLLECTOR_CONFIG = "jmx-collector-config"
 
  // labels
@@ -203,6 +208,10 @@ class PrometheusSink(
       .getOrElse(true)
   val enableJmxCollector: Boolean =
     Option(property.getProperty(KEY_ENABLE_JMX_COLLECTOR))
+      .map(_.toBoolean)
+      .getOrElse(false)
+  val enableHostNameInInstance: Boolean =
+    Option(property.getProperty(KEY_ENABLE_HOSTNAME_IN_INSTANCE))
       .map(_.toBoolean)
       .getOrElse(false)
   val jmxCollectorConfig =
