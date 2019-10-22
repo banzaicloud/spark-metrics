@@ -243,7 +243,7 @@ public class PushGatewayWithTimestamp {
             }
 
             int response = connection.getResponseCode();
-            if (response != HttpURLConnection.HTTP_ACCEPTED) {
+            if (response != HttpURLConnection.HTTP_OK) {
                 logger.info("Error response from " + url);
 
                 String errMsg = readErrorStream(connection);
