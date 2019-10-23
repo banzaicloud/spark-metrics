@@ -24,7 +24,10 @@ import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.net.URL;
 import java.net.URLEncoder;
+import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -74,6 +77,9 @@ public class PushGatewayWithTimestamp {
     private static final Logger logger = LoggerFactory.getLogger(PushGatewayWithTimestamp.class);
     private final String address;
     private static final int SECONDS_PER_MILLISECOND = 1000;
+    private static final List<Integer> ACCEPTED_STATUS_CODES = new ArrayList<Integer>(Arrays.asList(
+            HttpURLConnection.HTTP_OK,
+            HttpURLConnection.HTTP_ACCEPTED));
     /**
      * Construct a Pushgateway, with the given address.
      * <p>
@@ -243,7 +249,7 @@ public class PushGatewayWithTimestamp {
             }
 
             int response = connection.getResponseCode();
-            if (response != HttpURLConnection.HTTP_OK) {
+            if (!ACCEPTED_STATUS_CODES.contains(response)) {
                 logger.info("Error response from " + url);
 
                 String errMsg = readErrorStream(connection);
