@@ -12,7 +12,7 @@ lazy val root = (project in file("."))
     scmInfo := Some(ScmInfo(url("https://github.com/banzaicloud/park-metrics"), "git@github.com:banzaicloud/spark-metrics.git")),
     licenses += ("Apache-2.0", url("http://www.apache.org/licenses/LICENSE-2.0")),
     scalaVersion := "2.11.12",
-    version      := "2.3-2.1.0",
+    version      := "2.3-2.1.1",
     libraryDependencies ++= Seq(
       "io.prometheus" % "simpleclient" % "0.3.0",
       "io.prometheus" % "simpleclient_dropwizard" % "0.3.0",
