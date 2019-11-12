@@ -234,7 +234,7 @@ class PrometheusSink(
 
   lazy val sparkMetricExports: DropwizardExports = metricsNameCaptureRegex match {
     case Some(r) => new DropwizardExportsWithMetricNameCaptureAndReplace(r, metricsNameReplacement, registry)
-    case _ => new DropwizardExports(registry)
+    case _ => new com.banzaicloud.spark.metrics.DropwizardExports(registry)
   }
 
   lazy val jmxMetrics: JmxCollector = new JmxCollector(new File(jmxCollectorConfig))
