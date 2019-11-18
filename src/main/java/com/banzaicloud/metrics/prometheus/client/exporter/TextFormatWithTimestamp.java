@@ -17,11 +17,13 @@ import java.io.IOException;
 import java.io.Writer;
 import java.util.Collections;
 import java.util.Enumeration;
+import java.util.HashSet;
 import java.util.List;
 
 import io.prometheus.client.Collector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import scala.Tuple1;
 
 /**
  * Writing {@link Collector.MetricFamilySamples}
@@ -63,9 +65,38 @@ public class TextFormatWithTimestamp {
      */
     protected static String buildTextFormat(Enumeration<Collector.MetricFamilySamples> mfs,
                                             String timestamp) {
-        StringBuilder textFormatBuilder = new StringBuilder();
 
+        class MetricKey {
+            String name;
+            Collector.Type type;
+
+            MetricKey(String name, Collector.Type type){
+                this.name = name;
+                this.type = type;
+            }
+            @Override
+            public boolean equals(Object obj) {
+                MetricKey other = (MetricKey) obj;
+                return other.name.equals(name) && other.type.equals(type);
+            }
+            @Override
+            public int hashCode() {
+                int hash = 1;
+                hash = 37 * hash + name.hashCode();
+                hash = 37 * hash + type.hashCode();
+                return hash;
+            }
+        }
+        // filter out duplicate metric families samples
+        HashSet<MetricKey> processedMetrics = new HashSet<>();
+
+        StringBuilder textFormatBuilder = new StringBuilder();
         for (Collector.MetricFamilySamples metricFamilySamples : Collections.list(mfs)) {
+            MetricKey key = new MetricKey(metricFamilySamples.name, metricFamilySamples.type);
+            if (processedMetrics.contains(key)){
+                continue;
+            }
+
             appendHelp(textFormatBuilder, metricFamilySamples.name, metricFamilySamples.help);
             appendType(textFormatBuilder, metricFamilySamples.name, metricFamilySamples.type);
 
@@ -76,6 +107,7 @@ public class TextFormatWithTimestamp {
             }
 
             textFormatBuilder.append('\n');
+            processedMetrics.add(key);
         }
 
         return textFormatBuilder.toString();
