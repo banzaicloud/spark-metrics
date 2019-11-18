@@ -30,10 +30,9 @@ import com.codahale.metrics._
 import io.prometheus.client.CollectorRegistry
 import io.prometheus.client.dropwizard.DropwizardExports
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.METRICS_NAMESPACE
 import io.prometheus.jmx.JmxCollector
-import org.apache.spark.metrics.sink.Sink
-import org.apache.spark.{SecurityManager, SparkConf, SparkEnv}
+import org.apache.spark.metrics.sink.NonPrivateSink
+import org.apache.spark.{NonPrivateSecurityManager, SparkConf, SparkEnv}
 
 import scala.collection.JavaConverters._
 import scala.util.{Failure, Success, Try}
@@ -43,8 +42,8 @@ import scala.util.matching.Regex
 class PrometheusSink(
                       val property: Properties,
                       val registry: MetricRegistry,
-                      securityMgr: SecurityManager)
-  extends Sink with Logging {
+                      securityMgr: NonPrivateSecurityManager)
+  extends NonPrivateSink with Logging {
 
   private val lbv = raw"(.+)\s*=\s*(.*)".r
 
@@ -71,7 +70,7 @@ class PrometheusSink(
       val sparkConf: SparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(defaultSparkConf)
 
 
-      val metricsNamespace: Option[String] = sparkConf.get(METRICS_NAMESPACE)
+      val metricsNamespace: Option[String] = sparkConf.getOption("spark.metrics.namespace")
       val sparkAppId: Option[String] = sparkConf.getOption("spark.app.id")
       val sparkAppName: Option[String] = sparkConf.getOption("spark.app.name")
       val executorId: Option[String] = sparkConf.getOption("spark.executor.id")
