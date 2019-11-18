@@ -27,8 +27,8 @@ lazy val root = (project in file("."))
       "com.google.guava" % "guava" % "26.0-android",
       "io.prometheus.jmx" % "collector" % "0.10",
       "com.novocode" % "junit-interface" % "0.11" % Test,
-      "org.apache.spark" %% "spark-core" % "2.4.4",
-      "org.apache.spark" %% "spark-network-common" % "2.4.4"
+      "org.apache.spark" %% "spark-core" % "2.4.4" % Provided,
+      "org.apache.spark" %% "spark-network-common" % "2.4.4" % Provided
     ),
     testOptions in Test := Seq(Tests.Argument(TestFrameworks.JUnit, "-a"))
   )
