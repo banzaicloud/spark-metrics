@@ -1,3 +1,7 @@
+lazy val scala212 = "2.12.10"
+lazy val scala211 = "2.11.12"
+lazy val supportedScalaVersions = List(scala212, scala211)
+
 lazy val root = (project in file("."))
   .settings(
     name := "spark-metrics",
@@ -11,7 +15,8 @@ lazy val root = (project in file("."))
     ),
     scmInfo := Some(ScmInfo(url("https://github.com/banzaicloud/park-metrics"), "git@github.com:banzaicloud/spark-metrics.git")),
     licenses += ("Apache-2.0", url("http://www.apache.org/licenses/LICENSE-2.0")),
-    scalaVersion := "2.11.12",
+    scalaVersion := scala212,
+    crossScalaVersions := supportedScalaVersions,
     version      := "2.3-2.1.2",
     libraryDependencies ++= Seq(
       "io.prometheus" % "simpleclient" % "0.3.0",
@@ -21,8 +26,10 @@ lazy val root = (project in file("."))
       "org.slf4j" % "slf4j-api" % "1.7.16",
       "com.google.guava" % "guava" % "26.0-android",
       "io.prometheus.jmx" % "collector" % "0.10",
-      "com.novocode" % "junit-interface" % "0.11" % Test
-    )
+      "com.novocode" % "junit-interface" % "0.11" % Test,
+      "org.apache.spark" %% "spark-core" % "2.4.4" % Provided
+    ),
+    testOptions in Test := Seq(Tests.Argument(TestFrameworks.JUnit, "-a"))
   )
 
 
