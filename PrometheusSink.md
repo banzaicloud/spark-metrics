@@ -22,7 +22,7 @@ Add the following lines to metrics configuration file:
 
 ```sh
 # Enable Prometheus for all instances by class name
-*.sink.prometheus.class=com.banzaicloud.spark.metrics.sink.PrometheusSink
+*.sink.prometheus.class=org.apache.spark.metrics.sink.PrometheusSink
 # Prometheus pushgateway address
 *.sink.prometheus.pushgateway-address-protocol=<prometheus pushgateway protocol> - defaults to http
 *.sink.prometheus.pushgateway-address=<prometheus pushgateway address> - defaults to 127.0.0.1:9091
