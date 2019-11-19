@@ -31,19 +31,14 @@ import io.prometheus.client.CollectorRegistry
 import io.prometheus.client.dropwizard.DropwizardExports
 import org.apache.spark.internal.Logging
 import io.prometheus.jmx.JmxCollector
-import org.apache.spark.metrics.sink.NonPrivateSink
-import org.apache.spark.{NonPrivateSecurityManager, SparkConf, SparkEnv}
+import org.apache.spark.{SparkConf, SparkEnv}
 
 import scala.collection.JavaConverters._
 import scala.util.{Failure, Success, Try}
 import scala.util.matching.Regex
 
 
-class PrometheusSink(
-                      val property: Properties,
-                      val registry: MetricRegistry,
-                      securityMgr: NonPrivateSecurityManager)
-  extends NonPrivateSink with Logging {
+abstract class PrometheusSink(property: Properties, registry: MetricRegistry)  extends Logging {
 
   private val lbv = raw"(.+)\s*=\s*(.*)".r
 
@@ -243,7 +238,7 @@ class PrometheusSink(
 
   val reporter = new Reporter(registry)
 
-  override def start(): Unit = {
+  def start(): Unit = {
     if (enableDropwizardCollector) {
       sparkMetricExports.register(pushRegistry)
     }
@@ -253,7 +248,7 @@ class PrometheusSink(
     reporter.start(pollPeriod, pollUnit)
   }
 
-  override def stop(): Unit = {
+  def stop(): Unit = {
     reporter.stop()
     if (enableDropwizardCollector) {
       pushRegistry.unregister(sparkMetricExports)
@@ -263,7 +258,7 @@ class PrometheusSink(
     }
   }
 
-  override def report(): Unit = {
+  def report(): Unit = {
     reporter.report()
   }
 
