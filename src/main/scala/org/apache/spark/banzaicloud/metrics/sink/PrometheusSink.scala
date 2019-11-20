@@ -1,9 +1,10 @@
-package org.apache.spark.metrics.sink
+package org.apache.spark.banzaicloud.metrics.sink
 
 import java.util.Properties
 
 import com.codahale.metrics.MetricRegistry
 import org.apache.spark.SecurityManager
+import org.apache.spark.metrics.sink.Sink
 
 class PrometheusSink(val property: Properties,
                      val registry: MetricRegistry,

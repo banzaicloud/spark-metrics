@@ -1,12 +1,12 @@
-package org.apache.spark.metrics.sink
+package org.apache.spark.banzaicloud.metrics.sink
 
-import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.metrics.MetricsSystem
+import org.apache.spark.{SecurityManager, SparkConf}
 import org.junit.{After, Before, Test}
 
 class PrometheusSinkSuite {
   private val sinkClassPropertyName = "spark.metrics.conf.*.sink.prometheus.class"
-  private val sinkClassPropertyValue = "org.apache.spark.metrics.sink.PrometheusSink"
+  private val sinkClassPropertyValue = "org.apache.spark.banzaicloud.metrics.sink.PrometheusSink"
 
   @Test
   def testThatPrometheusSinkCanBeLoaded() = {
