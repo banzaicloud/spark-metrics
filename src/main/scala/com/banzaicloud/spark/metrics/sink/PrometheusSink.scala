@@ -76,13 +76,13 @@ abstract class PrometheusSink(property: Properties, registry: MetricRegistry)  e
       val role: String = (sparkAppId, executorId) match {
         case (Some(_), Some("driver")) | (Some(_), Some("<driver>"))=> "driver"
         case (Some(_), Some(_)) => "executor"
-        case _ => "shuffle"
+        case _ => "unknown"
       }
 
       val job: String = role match {
         case "driver" => metricsNamespace.getOrElse(sparkAppId.get)
         case "executor" => metricsNamespace.getOrElse(sparkAppId.get)
-        case _ => metricsNamespace.getOrElse("shuffle")
+        case _ => metricsNamespace.getOrElse("unknown")
       }
 
       val instance: String = if (enableHostNameInInstance) InetAddress.getLocalHost.getHostName else sparkAppId.getOrElse("")
