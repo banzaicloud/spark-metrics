@@ -1,17 +1,9 @@
 package com.banzaicloud.spark.metrics
 
-import com.codahale.metrics.Counter
-import com.codahale.metrics.Histogram
 import com.codahale.metrics.MetricRegistry
-import com.codahale.metrics.UniformReservoir
-import io.prometheus.client.Collector
-import io.prometheus.client.CollectorRegistry
-import org.junit.Assert
-import org.junit.Test
-import java.util.{Collections, Enumeration}
-import java.util
-
+import io.prometheus.client.{Collector, CollectorRegistry}
 import io.prometheus.jmx.JmxCollector
+import org.junit.{Assert, Test}
 
 import scala.collection.JavaConverters._
 
@@ -23,12 +15,10 @@ class SparkCollectorDecoratorsSuite {
     val registry = new MetricRegistry
     val jmxCollector = new JmxCollector("")
     val pushRegistry = new CollectorRegistry(true)
-    val metric1 = new Counter
+    val metric1 = registry.counter("test-metric-sample1")
     metric1.inc()
-    val metric2 = new Histogram(new UniformReservoir)
+    val metric2 = registry.histogram("test-metric-sample2")
     metric2.update(2)
-    registry.register("test-metric-sample1", metric1)
-    registry.register("test-metric-sample2", metric2)
 
     // Then
     lazy val exportedMetrics = pushRegistry.metricFamilySamples().asScala.toList
@@ -88,6 +78,25 @@ class SparkCollectorDecoratorsSuite {
       Assert.assertTrue(sample.name.startsWith("test_metric_sample__2__"))
     }
 
+  }
+
+  @Test def testDeduplication(): Unit = new Fixture { // given
+    val registry2 = new MetricRegistry
+    val counterA = registry2.counter("counter")
+    counterA.inc(20)
+    counterA.inc(30)
+    val registry3 = new MetricRegistry
+    val counterB = registry3.counter("counter")
+    counterB.inc(40)
+    counterB.inc(50)
+    registry.register("hive_", registry2)
+    registry.register("hive.", registry3)
+
+
+    val metricsExports = new SparkDropwizardExports(registry, None, Map.empty, None)
+    metricsExports.register(pushRegistry)
+    val counters = exportedMetrics.filter(mfs => mfs.`type`== Collector.Type.GAUGE && mfs.name == "hive__counter")
+    Assert.assertEquals(1, counters.size)
   }
 
   @Test def testStaticHelpMessage(): Unit = new Fixture { // given
