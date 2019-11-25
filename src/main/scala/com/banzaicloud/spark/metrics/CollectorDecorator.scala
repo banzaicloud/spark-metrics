@@ -8,7 +8,7 @@ import io.prometheus.client.Collector.MetricFamilySamples.Sample
 
 import scala.collection.JavaConverters._
 
-abstract class CollectorDecorator(val parent: Collector)
+abstract class CollectorDecorator(parent: Collector)
   extends io.prometheus.client.Collector {
 
 
