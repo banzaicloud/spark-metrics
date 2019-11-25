@@ -15,6 +15,7 @@ class PrometheusSinkSuite {
     val sm = new SecurityManager(conf)
     val ms = MetricsSystem.createMetricsSystem(instance, conf, sm)
     ms.start()
+    ms.stop()
   }
 
   @Before

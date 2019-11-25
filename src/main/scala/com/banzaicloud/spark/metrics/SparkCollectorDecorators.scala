@@ -1,6 +1,5 @@
 package com.banzaicloud.spark.metrics
 
-import java.io.File
 import java.util
 
 import com.codahale.metrics.MetricRegistry
@@ -9,6 +8,7 @@ import io.prometheus.client.Collector.MetricFamilySamples
 import io.prometheus.client.Collector.MetricFamilySamples.Sample
 import io.prometheus.client.dropwizard.DropwizardExports
 import io.prometheus.jmx.JmxCollector
+import org.apache.spark.internal.Logging
 
 import scala.collection.JavaConverters._
 import scala.util.matching.Regex
@@ -73,6 +73,25 @@ trait ConstantHelpDecorator extends CollectorDecorator {
   }
 }
 
+trait DeduplicatorDecorator extends CollectorDecorator with Logging {
+
+  override def collect(): util.List[Collector.MetricFamilySamples] = {
+    val metrics = super.collect().asScala
+    metrics
+      .groupBy(f => (f.name, f.`type`))
+      .flatMap {
+        case (_, single) if single.lengthCompare(2) < 0 =>
+
+          single
+        case ((name, metricType), duplicates) =>
+          logDebug(s"Found ${duplicates.length} metrics with the same name '${name}' and type ${metricType}")
+          duplicates.lastOption
+      }
+      .toList
+      .asJava
+  }
+}
+
 class SparkDropwizardExports(private val registry: MetricRegistry,
                              override val metricsNameReplace: Option[NameDecorator.Replace],
                              override val extraLabels: Map[String, String],
@@ -81,7 +100,8 @@ class SparkDropwizardExports(private val registry: MetricRegistry,
     with NameDecorator
     with LabelsDecorator
     with ConstantTimestampDecorator
-    with ConstantHelpDecorator {
+    with ConstantHelpDecorator
+    with DeduplicatorDecorator {
   override val constatntHelp: String = "Generated from Dropwizard metric import"
 }
 
@@ -91,3 +111,4 @@ class SparkJmxExports(private val jmxCollector: JmxCollector,
   extends CollectorDecorator(jmxCollector)
     with LabelsDecorator
     with ConstantTimestampDecorator
+    with DeduplicatorDecorator
