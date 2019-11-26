@@ -31,7 +31,7 @@ class SparkCollectorDecoratorsSuite {
 
   @Test def testStaticTimestamp(): Unit = new Fixture {
     // given
-    val staticTs = 1L
+    val staticTs = PushTimestampDecorator.PushTimestampProvider(() => 1L)
 
     val metricsExports = new SparkDropwizardExports(registry, None, Map.empty, Some(staticTs))
     metricsExports.register(pushRegistry)
@@ -39,12 +39,12 @@ class SparkCollectorDecoratorsSuite {
     // then
     exportedMetrics.foreach { family =>
       family.samples.asScala.foreach { sample =>
-        Assert.assertEquals(sample.timestampMs, staticTs)
+        Assert.assertEquals(1L, sample.timestampMs)
       }
     }
   }
 
-  @Test def testEmptyStaticTimestamp(): Unit = new Fixture {
+  @Test def testNoPushTimestamp(): Unit = new Fixture {
     // given
     val metricsExports = new SparkDropwizardExports(registry, None, Map.empty, None)
     val jmxMetricsExports = new SparkJmxExports(jmxCollector, Map.empty, None)
@@ -54,7 +54,7 @@ class SparkCollectorDecoratorsSuite {
     // then
     exportedMetrics.foreach { family =>
       family.samples.asScala.foreach { sample =>
-        Assert.assertEquals(sample.timestampMs, null)
+        Assert.assertEquals(null, sample.timestampMs)
       }
     }
   }
@@ -108,7 +108,7 @@ class SparkCollectorDecoratorsSuite {
     // then
     val expectedHelp = "Generated from Dropwizard metric import"
     exportedMetrics.foreach { family =>
-      Assert.assertEquals(family.help, expectedHelp)
+      Assert.assertEquals(expectedHelp, family.help)
     }
   }
 
