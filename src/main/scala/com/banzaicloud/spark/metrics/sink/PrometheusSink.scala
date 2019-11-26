@@ -23,6 +23,7 @@ import java.util.Properties
 import java.util.concurrent.TimeUnit
 
 import com.banzaicloud.spark.metrics.NameDecorator.Replace
+import com.banzaicloud.spark.metrics.PushTimestampDecorator.PushTimestampProvider
 import com.banzaicloud.spark.metrics.{SparkDropwizardExports, SparkJmxExports}
 import com.codahale.metrics._
 import io.prometheus.client.CollectorRegistry
@@ -199,13 +200,13 @@ abstract class PrometheusSink(property: Properties,
 
   val pushRegistry: CollectorRegistry = CollectorRegistry.defaultRegistry
 
-  private val metricTimestamp = if (enableTimestamp) Some(System.currentTimeMillis) else None
+  private val pushTimestamp = if (enableTimestamp) Some(PushTimestampProvider()) else None
 
   private val replace = metricsNameCaptureRegex.map(Replace(_, metricsNameReplacement))
 
-  lazy val sparkMetricExports = new SparkDropwizardExports(registry, replace, labelsMap, metricTimestamp)
+  lazy val sparkMetricExports = new SparkDropwizardExports(registry, replace, labelsMap, pushTimestamp)
 
-  lazy val jmxMetrics = new SparkJmxExports(new JmxCollector(new File(jmxCollectorConfig)), labelsMap, metricTimestamp)
+  lazy val jmxMetrics = new SparkJmxExports(new JmxCollector(new File(jmxCollectorConfig)), labelsMap, pushTimestamp)
 
   val pushGateway: PushGateway = pushGatewayBuilder(s"$pushGatewayAddressProtocol://$pushGatewayAddress")
 
