@@ -2,6 +2,7 @@ package com.banzaicloud.spark.metrics
 
 import java.util
 
+import com.banzaicloud.spark.metrics.PushTimestampDecorator.PushTimestampProvider
 import com.codahale.metrics.MetricRegistry
 import io.prometheus.client.Collector
 import io.prometheus.client.Collector.MetricFamilySamples
@@ -55,16 +56,20 @@ trait LabelsDecorator extends CollectorDecorator {
     }
 }
 
-trait ConstantTimestampDecorator extends CollectorDecorator {
-  val maybeTimestamp: Option[Long]
+object PushTimestampDecorator {
+  case class PushTimestampProvider(getTimestamp: () => Long = System.currentTimeMillis) extends AnyVal
+}
+trait PushTimestampDecorator extends CollectorDecorator {
+  val maybeTimestampProvider: Option[PushTimestampProvider]
 
   override protected def sampleTimestamp(sample: Sample): java.lang.Long = {
-    maybeTimestamp match {
-      case Some(t) => t
-      case None => null
+    maybeTimestampProvider match {
+      case Some(t) => t.getTimestamp()
+      case None => sample.timestampMs
     }
   }
 }
+
 trait ConstantHelpDecorator extends CollectorDecorator {
   val constatntHelp: String
 
@@ -95,11 +100,11 @@ trait DeduplicatorDecorator extends CollectorDecorator with Logging {
 class SparkDropwizardExports(private val registry: MetricRegistry,
                              override val metricsNameReplace: Option[NameDecorator.Replace],
                              override val extraLabels: Map[String, String],
-                             override val maybeTimestamp: Option[Long])
+                             override val maybeTimestampProvider: Option[PushTimestampProvider])
   extends CollectorDecorator(new DropwizardExports(registry))
     with NameDecorator
     with LabelsDecorator
-    with ConstantTimestampDecorator
+    with PushTimestampDecorator
     with ConstantHelpDecorator
     with DeduplicatorDecorator {
   override val constatntHelp: String = "Generated from Dropwizard metric import"
@@ -107,8 +112,8 @@ class SparkDropwizardExports(private val registry: MetricRegistry,
 
 class SparkJmxExports(private val jmxCollector: JmxCollector,
                  override val extraLabels: Map[String, String],
-                 override val maybeTimestamp: Option[Long])
+                 override val maybeTimestampProvider: Option[PushTimestampProvider])
   extends CollectorDecorator(jmxCollector)
     with LabelsDecorator
-    with ConstantTimestampDecorator
+    with PushTimestampDecorator
     with DeduplicatorDecorator
