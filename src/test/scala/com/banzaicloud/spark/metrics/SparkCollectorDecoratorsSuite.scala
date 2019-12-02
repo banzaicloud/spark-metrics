@@ -1,5 +1,7 @@
 package com.banzaicloud.spark.metrics
 
+import java.util.concurrent.atomic.AtomicLong
+
 import com.codahale.metrics.MetricRegistry
 import io.prometheus.client.{Collector, CollectorRegistry}
 import io.prometheus.jmx.JmxCollector
@@ -21,27 +23,34 @@ class SparkCollectorDecoratorsSuite {
     metric2.update(2)
 
     // Then
-    lazy val exportedMetrics = pushRegistry.metricFamilySamples().asScala.toList
-    lazy val counterFamily = exportedMetrics.find(_.`type`== Collector.Type.GAUGE).get
-    lazy val histogramFamily = exportedMetrics.find(_.`type`== Collector.Type.SUMMARY).get
-    lazy val counterSamples = counterFamily.samples.asScala
-    lazy val histogramSamples = histogramFamily.samples.asScala
+    def getExportedMetrics = pushRegistry.metricFamilySamples().asScala.toList
+    def getCounterFamily = getExportedMetrics.find(_.`type`== Collector.Type.GAUGE).get
+    def getHistogramFamily = getExportedMetrics.find(_.`type`== Collector.Type.SUMMARY).get
+    def getCounterSamples = getCounterFamily.samples.asScala
+    def getHistogramSamples = getHistogramFamily.samples.asScala
 
   }
 
   @Test def testStaticTimestamp(): Unit = new Fixture {
     // given
-    val staticTs = PushTimestampDecorator.PushTimestampProvider(() => 1L)
+    val ts = new AtomicLong(0)
+    val pushTs = PushTimestampDecorator.PushTimestampProvider(() => ts.incrementAndGet())
 
-    val metricsExports = new SparkDropwizardExports(registry, None, Map.empty, Some(staticTs))
+    val metricsExports = new SparkDropwizardExports(registry, None, Map.empty, Some(pushTs))
     metricsExports.register(pushRegistry)
 
-    // then
-    exportedMetrics.foreach { family =>
-      family.samples.asScala.foreach { sample =>
-        Assert.assertEquals(1L, sample.timestampMs)
+    def testTimestampEqual() = {
+      val allTimestamps = getExportedMetrics.flatMap { family =>
+        family.samples.asScala.map(_.timestampMs)
       }
-    }
+      Assert.assertSame("Samples were omitted.", 8, allTimestamps.size)
+      Assert.assertSame("Timestamps are not the same.",1, allTimestamps.distinct.size)
+  }
+
+    // then
+    testTimestampEqual()
+    testTimestampEqual()
+    testTimestampEqual()
   }
 
   @Test def testNoPushTimestamp(): Unit = new Fixture {
@@ -52,7 +61,7 @@ class SparkCollectorDecoratorsSuite {
     jmxMetricsExports.register(pushRegistry)
 
     // then
-    exportedMetrics.foreach { family =>
+    getExportedMetrics.foreach { family =>
       family.samples.asScala.foreach { sample =>
         Assert.assertEquals(null, sample.timestampMs)
       }
@@ -66,37 +75,20 @@ class SparkCollectorDecoratorsSuite {
     metricsExports.register(pushRegistry)
 
     // then
-    Assert.assertTrue(exportedMetrics.size == 2)
+    Assert.assertTrue(getExportedMetrics.size == 2)
 
+    val counterSamples = getCounterSamples
     Assert.assertTrue(counterSamples.size == 1)
     counterSamples.foreach { sample =>
       Assert.assertTrue(s"[${sample.name}]", sample.name == "test_metric_sample__1__")
     }
 
+    val histogramSamples = getHistogramSamples
     Assert.assertTrue(histogramSamples.size == 7)
     histogramSamples.foreach { sample =>
       Assert.assertTrue(sample.name.startsWith("test_metric_sample__2__"))
     }
 
-  }
-
-  @Test def testDeduplication(): Unit = new Fixture { // given
-    val registry2 = new MetricRegistry
-    val counterA = registry2.counter("counter")
-    counterA.inc(20)
-    counterA.inc(30)
-    val registry3 = new MetricRegistry
-    val counterB = registry3.counter("counter")
-    counterB.inc(40)
-    counterB.inc(50)
-    registry.register("hive_", registry2)
-    registry.register("hive.", registry3)
-
-
-    val metricsExports = new SparkDropwizardExports(registry, None, Map.empty, None)
-    metricsExports.register(pushRegistry)
-    val counters = exportedMetrics.filter(mfs => mfs.`type`== Collector.Type.GAUGE && mfs.name == "hive__counter")
-    Assert.assertEquals(1, counters.size)
   }
 
   @Test def testStaticHelpMessage(): Unit = new Fixture { // given
@@ -107,7 +99,7 @@ class SparkCollectorDecoratorsSuite {
 
     // then
     val expectedHelp = "Generated from Dropwizard metric import"
-    exportedMetrics.foreach { family =>
+    getExportedMetrics.foreach { family =>
       Assert.assertEquals(expectedHelp, family.help)
     }
   }
@@ -119,6 +111,7 @@ class SparkCollectorDecoratorsSuite {
     jmxMetricsExports.register(pushRegistry)
 
     // then
+    val exportedMetrics = getExportedMetrics
     Assert.assertTrue(exportedMetrics.size > 2)
 
     exportedMetrics.foreach { family =>
