@@ -24,7 +24,7 @@ import java.util.concurrent.TimeUnit
 
 import com.banzaicloud.spark.metrics.NameDecorator.Replace
 import com.banzaicloud.spark.metrics.PushTimestampDecorator.PushTimestampProvider
-import com.banzaicloud.spark.metrics.{SparkDropwizardExports, SparkJmxExports}
+import com.banzaicloud.spark.metrics.{DeduplicatedCollectorRegistry, SparkDropwizardExports, SparkJmxExports}
 import com.codahale.metrics._
 import io.prometheus.client.CollectorRegistry
 import io.prometheus.client.dropwizard.DropwizardExports
@@ -198,7 +198,7 @@ abstract class PrometheusSink(property: Properties,
   logInfo(s"$KEY_LABELS -> ${labelsMap}")
   logInfo(s"$KEY_JMX_COLLECTOR_CONFIG -> $jmxCollectorConfig")
 
-  val pushRegistry: CollectorRegistry = CollectorRegistry.defaultRegistry
+  val pushRegistry: CollectorRegistry = new DeduplicatedCollectorRegistry()
 
   private val pushTimestamp = if (enableTimestamp) Some(PushTimestampProvider()) else None
 
@@ -262,7 +262,7 @@ abstract class PrometheusSink(property: Properties,
   }
 
   /**
-    * Default group key use instance name. So for every spar job instance it will create new metric group in the Push Gateway.
+    * Default group key use instance name. So for every spark job instance it will create new metric group in the Push Gateway.
     * This may lead to OOM errors.
     * This method exists for backward compatibility.
     */
