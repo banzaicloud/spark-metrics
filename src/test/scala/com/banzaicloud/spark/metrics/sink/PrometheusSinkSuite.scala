@@ -9,7 +9,7 @@ import com.codahale.metrics.MetricRegistry
 import io.prometheus.client.CollectorRegistry
 import io.prometheus.client.exporter.PushGateway
 import org.apache.spark.SparkConf
-import org.junit.{After, Assert, Before, Test}
+import org.junit.{Assert, Test}
 
 import scala.collection.JavaConverters._
 import scala.util.Try
@@ -97,7 +97,7 @@ class PrometheusSinkSuite {
                             registry: MetricRegistry,
                             pushGateway: PushGateway,
                             sparkConf: SparkConf)
-    extends PrometheusSink(property, registry, (_) => pushGateway, sparkConf) {
+    extends PrometheusSink(property, registry, _ => pushGateway, sparkConf) {
 
   }
 
