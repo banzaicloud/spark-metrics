@@ -101,7 +101,7 @@ class PrometheusSinkSuite {
 
   }
 
-  class PushGatewayMock extends PushGateway("anything") {
+  class PushGatewayMock extends PushGateway(new java.net.URL("http://example.com")) {
     val requests = new CopyOnWriteArrayList[Request]().asScala
     case class Request(registry: CollectorRegistry, job: String, groupingKey: util.Map[String, String], method: String)
 
