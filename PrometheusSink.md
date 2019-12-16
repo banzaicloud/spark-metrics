@@ -56,7 +56,7 @@ e.g. `(.*driver_)(.+)`. *Supported only in version **2.3-1.1.0 and above**.*
 * **metrics-name-replacement** - the replacement to replace captured sections(regexp groups) metric name. e.g. `${2}`. *Supported only in version **2.3-1.1.0 and above**.*
 * **labels** - the list of labels to be passed to Prometheus with each metrics in addition to the default ones. This must be specified in the format label=value sperated by comma. *Supported only in version **2.3-1.1.0 and above**.*
 * **group-key** - the list of labels to be passed to pushgateway as a group key. This must be specified in the label=value format separated by comma. `role`, `number` labels are always added even if custom group key is set. If `group-key` is not specified PrometheusSink will use `role`, `app_name`, `instance`, `number` and all metrics labels as a group key.
-Please note that `instance` name change between application executions, so pushgateway will create and keep metrics groups from the old runs. This may lead to memory issues after many runs. That's way setting `group-key` is strongly advised.  *Supported only in version **2.3-1.1.0 and above**.*
+Please note that `instance` name change between application executions, so pushgateway will create and keep metrics groups from the old runs. This may lead to memory issues after many runs. That's way setting `group-key` is strongly advised.  *Supported only in version **2.4-1.0.0 and above**.*
 * **enable-dropwizard-collector** - from version 2.3-2.0.0 you can enable/disable dropwizard collector
 * **enable-jmx-collector** - from version 2.3-2.0.0 you can enable/disable JMX collector which collects configure metrics from JMX
 * **jmx-collector-config** - the location of jmx collector config file
