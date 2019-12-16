@@ -17,7 +17,7 @@
 package com.banzaicloud.spark.metrics.sink
 
 import java.io.File
-import java.net.{InetAddress, URI, UnknownHostException}
+import java.net.{InetAddress, URI, URL, UnknownHostException}
 import java.util
 import java.util.Properties
 import java.util.concurrent.TimeUnit
@@ -41,7 +41,7 @@ import scala.collection.JavaConverters._
 
 abstract class PrometheusSink(property: Properties,
                               registry: MetricRegistry,
-                              pushGatewayBuilder: String => PushGateway = new PushGateway(_),
+                              pushGatewayBuilder: URL => PushGateway = new PushGateway(_),
                               defaultSparkConf: SparkConf = new SparkConf(true)
                              )  extends Logging {
 
@@ -208,7 +208,7 @@ abstract class PrometheusSink(property: Properties,
 
   lazy val jmxMetrics = new SparkJmxExports(new JmxCollector(new File(jmxCollectorConfig)), labelsMap, pushTimestamp)
 
-  val pushGateway: PushGateway = pushGatewayBuilder(s"$pushGatewayAddressProtocol://$pushGatewayAddress")
+  val pushGateway: PushGateway = pushGatewayBuilder(new URL(s"$pushGatewayAddressProtocol://$pushGatewayAddress"))
 
   val reporter = new Reporter(registry)
 
