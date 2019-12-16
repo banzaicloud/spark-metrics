@@ -1,18 +1,29 @@
 package com.banzaicloud.spark.metrics
 
 import java.{lang, util}
-import java.util.{Collections, Enumeration}
+import java.util.Collections
 
 import io.prometheus.client.{Collector, CollectorRegistry}
 
 import scala.collection.JavaConverters._
 import org.apache.spark.internal.Logging
 
+import scala.util.{Failure, Try}
+
 class DeduplicatedCollectorRegistry(parent: CollectorRegistry = CollectorRegistry.defaultRegistry)
   extends CollectorRegistry with Logging {
   private type MetricsEnum = util.Enumeration[Collector.MetricFamilySamples]
 
-  override def register(m: Collector): Unit = parent.register(m)
+  override def register(m: Collector): Unit = {
+
+    // in case collectors with the same name are registered multiple times keep the first one
+    Try(parent.register(m)) match {
+      case Failure(ex) if ex.getMessage.startsWith("Collector already registered that provides name:") =>
+        // TODO: find a more robust solution for checking if there is already a collector registered for a specific metric
+      case Failure(ex) => throw ex
+      case _ =>
+    }
+  }
 
   override def unregister(m: Collector): Unit = parent.unregister(m)
 
