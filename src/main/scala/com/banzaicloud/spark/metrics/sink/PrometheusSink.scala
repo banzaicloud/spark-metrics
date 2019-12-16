@@ -31,19 +31,26 @@ import io.prometheus.client.dropwizard.DropwizardExports
 import io.prometheus.client.exporter.PushGateway
 import io.prometheus.jmx.JmxCollector
 import org.apache.spark.internal.Logging
-import org.apache.spark.{SparkConf, SparkEnv}
 
+import scala.collection.JavaConverters._
 import scala.collection.immutable.ListMap
 import scala.util.Try
 import scala.util.matching.Regex
-import scala.collection.JavaConverters._
 
-
+object PrometheusSink {
+  trait SinkConfig extends Serializable {
+    def metricsNamespace: Option[String]
+    def sparkAppId: Option[String]
+    def sparkAppName: Option[String]
+    def executorId: Option[String]
+  }
+}
 abstract class PrometheusSink(property: Properties,
                               registry: MetricRegistry,
-                              pushGatewayBuilder: URL => PushGateway = new PushGateway(_),
-                              defaultSparkConf: SparkConf = new SparkConf(true)
-                             )  extends Logging {
+                              sinkConfig: PrometheusSink.SinkConfig,
+                              pushGatewayBuilder: URL => PushGateway
+                              )  extends Logging {
+  import sinkConfig._
 
   private val lbv = raw"(.+)\s*=\s*(.*)".r
 
@@ -62,16 +69,6 @@ abstract class PrometheusSink(property: Properties,
                          histograms: util.SortedMap[String, Histogram],
                          meters: util.SortedMap[String, Meter],
                          timers: util.SortedMap[String, Timer]): Unit = {
-
-      // SparkEnv may become available only after metrics sink creation thus retrieving
-      // SparkConf from spark env here and not during the creation/initialisation of PrometheusSink.
-      val sparkConf: SparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(defaultSparkConf)
-
-
-      val metricsNamespace: Option[String] = sparkConf.getOption("spark.metrics.namespace")
-      val sparkAppId: Option[String] = sparkConf.getOption("spark.app.id")
-      val sparkAppName: Option[String] = sparkConf.getOption("spark.app.name")
-      val executorId: Option[String] = sparkConf.getOption("spark.executor.id")
 
       logInfo(s"metricsNamespace=$metricsNamespace, sparkAppName=$sparkAppName, sparkAppId=$sparkAppId, " +
         s"executorId=$executorId")
