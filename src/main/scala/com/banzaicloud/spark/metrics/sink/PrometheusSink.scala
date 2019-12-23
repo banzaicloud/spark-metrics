@@ -26,7 +26,7 @@ import com.banzaicloud.spark.metrics.NameDecorator.Replace
 import com.banzaicloud.spark.metrics.PushTimestampDecorator.PushTimestampProvider
 import com.banzaicloud.spark.metrics.{DeduplicatedCollectorRegistry, SparkDropwizardExports, SparkJmxExports}
 import com.codahale.metrics._
-import io.prometheus.client.CollectorRegistry
+import io.prometheus.client.{Collector, CollectorRegistry}
 import io.prometheus.client.dropwizard.DropwizardExports
 import io.prometheus.client.exporter.PushGateway
 import io.prometheus.jmx.JmxCollector
@@ -243,7 +243,7 @@ abstract class PrometheusSink(property: Properties,
 
   private def parseLabel(label: String): (String, String) = {
     label match {
-      case lbv(label, value) => (DropwizardExports.sanitizeMetricName(label), value)
+      case lbv(label, value) => (Collector.sanitizeMetricName(label), value)
       case _ =>
         throw new IllegalArgumentException("Can not parse labels ! Labels should be in label=value separated by commas format.")
     }
