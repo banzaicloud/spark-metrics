@@ -17,7 +17,7 @@ lazy val root = (project in file("."))
     licenses += ("Apache-2.0", url("http://www.apache.org/licenses/LICENSE-2.0")),
     scalaVersion := scala212,
     crossScalaVersions := supportedScalaVersions,
-    version      := "2.4-1.0.2",
+    version      := "2.4-1.0.3",
     libraryDependencies ++= Seq(
       "io.prometheus" % "simpleclient" % "0.8.0",
       "io.prometheus" % "simpleclient_dropwizard" % "0.8.0",
