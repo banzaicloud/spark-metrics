@@ -19,9 +19,9 @@ lazy val root = (project in file("."))
     crossScalaVersions := supportedScalaVersions,
     version      := "2.4-1.0.2",
     libraryDependencies ++= Seq(
-      "io.prometheus" % "simpleclient" % "0.3.0",
-      "io.prometheus" % "simpleclient_dropwizard" % "0.3.0",
-      "io.prometheus" % "simpleclient_pushgateway" % "0.3.0",
+      "io.prometheus" % "simpleclient" % "0.8.0",
+      "io.prometheus" % "simpleclient_dropwizard" % "0.8.0",
+      "io.prometheus" % "simpleclient_pushgateway" % "0.8.0",
       "io.dropwizard.metrics" % "metrics-core" % "3.1.2",
       "org.slf4j" % "slf4j-api" % "1.7.16",
       "com.google.guava" % "guava" % "26.0-android",
