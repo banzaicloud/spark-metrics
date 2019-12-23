@@ -2,33 +2,35 @@ lazy val scala212 = "2.12.10"
 lazy val scala211 = "2.11.12"
 lazy val supportedScalaVersions = List(scala212, scala211)
 
+val sparkVersion = "3.0.0-preview"
+
 lazy val root = (project in file("."))
   .settings(
     name := "spark-metrics",
     organization := "com.banzaicloud",
     organizationHomepage := Some(url("https://banzaicloud.com")),
-    homepage := Some(url("https://github.com/banzaicloud/park-metrics")),
+    homepage := Some(url("https://github.com/banzaicloud/spark-metrics")),
     developers := List(
       Developer("stoader", "Sebastian Toader", "st0ad3r@gmail.com", url("https://github.com/stoader")),
       Developer("sancyx", "Sandor Magyari", "sancyx@gmail.com", url("https://github.com/sancyx")),
       Developer("baluchicken", "Balint Molnar", "balintmolnar91@gmail.com", url("https://github.com/baluchicken"))
     ),
-    scmInfo := Some(ScmInfo(url("https://github.com/banzaicloud/park-metrics"), "git@github.com:banzaicloud/spark-metrics.git")),
+    scmInfo := Some(ScmInfo(url("https://github.com/banzaicloud/spark-metrics"), "git@github.com:banzaicloud/spark-metrics.git")),
     licenses += ("Apache-2.0", url("http://www.apache.org/licenses/LICENSE-2.0")),
     scalaVersion := scala212,
     crossScalaVersions := supportedScalaVersions,
-    version      := "2.3-2.1.2",
+    version      := "2.4",
     libraryDependencies ++= Seq(
-      "io.prometheus" % "simpleclient" % "0.3.0",
-      "io.prometheus" % "simpleclient_dropwizard" % "0.3.0",
-      "io.prometheus" % "simpleclient_pushgateway" % "0.3.0",
-      "io.dropwizard.metrics" % "metrics-core" % "3.1.2",
-      "org.slf4j" % "slf4j-api" % "1.7.16",
+      "io.prometheus" % "simpleclient" % "0.8.0",
+      "io.prometheus" % "simpleclient_dropwizard" % "0.8.0",
+      "io.prometheus" % "simpleclient_pushgateway" % "0.8.0",
+      "io.dropwizard.metrics" % "metrics-core" % "4.1.1",
+      "org.slf4j" % "slf4j-api" % "1.7.28",
       "com.google.guava" % "guava" % "26.0-android",
-      "io.prometheus.jmx" % "collector" % "0.10",
+      "io.prometheus.jmx" % "collector" % "0.12.0",
       "com.novocode" % "junit-interface" % "0.11" % Test,
-      "org.apache.spark" %% "spark-core" % "2.4.4" % Provided,
-      "org.apache.spark" %% "spark-network-common" % "2.4.4" % Provided
+      "org.apache.spark" %% "spark-core" % sparkVersion % Provided,
+      "org.apache.spark" %% "spark-network-common" % sparkVersion % Provided
     ),
     testOptions in Test := Seq(Tests.Argument(TestFrameworks.JUnit, "-a"))
   )
