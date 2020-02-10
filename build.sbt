@@ -25,7 +25,7 @@ lazy val root = (project in file("."))
       "io.dropwizard.metrics" % "metrics-core" % "3.1.2",
       "org.slf4j" % "slf4j-api" % "1.7.16",
       "com.google.guava" % "guava" % "26.0-android",
-      "io.prometheus.jmx" % "collector" % "0.10",
+      "io.prometheus.jmx" % "collector" % "0.12.0",
       "org.apache.spark" %% "spark-core" % "2.4.4",
       "com.novocode" % "junit-interface" % "0.11" % Test,
       // Spark shaded jetty is not resolved in scala 2.11
