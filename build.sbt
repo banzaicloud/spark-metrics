@@ -21,16 +21,19 @@ lazy val root = (project in file("."))
     crossScalaVersions := supportedScalaVersions,
     version      := "2.4",
     libraryDependencies ++= Seq(
-      "io.prometheus" % "simpleclient" % "0.8.0",
-      "io.prometheus" % "simpleclient_dropwizard" % "0.8.0",
-      "io.prometheus" % "simpleclient_pushgateway" % "0.8.0",
+      "io.prometheus" % "simpleclient" % "0.8.1",
+      "io.prometheus" % "simpleclient_dropwizard" % "0.8.1",
+      "io.prometheus" % "simpleclient_pushgateway" % "0.8.1",
       "io.dropwizard.metrics" % "metrics-core" % "4.1.1",
       "org.slf4j" % "slf4j-api" % "1.7.28",
       "com.google.guava" % "guava" % "26.0-android",
       "io.prometheus.jmx" % "collector" % "0.12.0",
       "com.novocode" % "junit-interface" % "0.11" % Test,
       "org.apache.spark" %% "spark-core" % sparkVersion % Provided,
-      "org.apache.spark" %% "spark-network-common" % sparkVersion % Provided
+      "org.apache.spark" %% "spark-network-common" % sparkVersion % Provided,
+      // Spark shaded jetty is not resolved in scala 2.11
+      // Described in https://issues.apache.org/jira/browse/SPARK-18162?focusedCommentId=15818123#comment-15818123
+      "org.eclipse.jetty" % "jetty-servlet"  % "9.4.18.v20190429" % Test
     ),
     testOptions in Test := Seq(Tests.Argument(TestFrameworks.JUnit, "-a"))
   )

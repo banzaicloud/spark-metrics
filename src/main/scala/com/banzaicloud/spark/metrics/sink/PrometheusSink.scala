@@ -17,9 +17,7 @@
 package com.banzaicloud.spark.metrics.sink
 
 import java.io.File
-import java.net.InetAddress
-import java.net.URI
-import java.net.UnknownHostException
+import java.net.{InetAddress, URI, URL, UnknownHostException}
 import java.util
 import java.util.Properties
 import java.util.concurrent.TimeUnit
@@ -38,7 +36,15 @@ import scala.util.{Failure, Success, Try}
 import scala.util.matching.Regex
 import PrometheusSink._
 
+import scala.collection.immutable.ListMap
+
 object PrometheusSink {
+  trait SinkConfig extends Serializable {
+    def metricsNamespace: Option[String]
+    def sparkAppId: Option[String]
+    def sparkAppName: Option[String]
+    def executorId: Option[String]
+  }
 
   val DEFAULT_PUSH_PERIOD: Int = 10
   val DEFAULT_PUSH_PERIOD_UNIT: TimeUnit = TimeUnit.SECONDS
@@ -71,7 +77,7 @@ object PrometheusSink {
 }
 
 abstract class PrometheusSink(property: Properties, registry: MetricRegistry)
-    extends Logging {
+  extends Logging {
 
   private val lbv = raw"(.+)\s*=\s*(.*)".r
 
@@ -342,5 +348,19 @@ abstract class PrometheusSink(property: Properties, registry: MetricRegistry)
 
     val envLabels = collectEnvLabels(sparkConf)
     Option(configLabelsMap ++ envLabels)
+  }
+
+  private def customGroupKey(role: String,
+                             executorId: Option[String],
+                             labels: Map[String, String]): ListMap[String, String] = {
+    (role, executorId) match {
+      case ("driver", _) =>
+        ListMap("role" -> role) ++ labels
+
+      case ("executor", Some(id)) =>
+        ListMap("role" -> role, "number" -> id) ++ labels
+      case _ =>
+        ListMap("role" -> role)
+    }
   }
 }
