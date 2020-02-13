@@ -22,16 +22,27 @@ import java.util
 import java.util.Properties
 import java.util.concurrent.TimeUnit
 
+import com.banzaicloud.spark.metrics.NameDecorator.Replace
+import com.banzaicloud.spark.metrics.PushTimestampDecorator.PushTimestampProvider
+import com.banzaicloud.spark.metrics.{DeduplicatedCollectorRegistry, SparkDropwizardExports, SparkJmxExports}
+import com.codahale.metrics._
+import io.prometheus.client.{Collector, CollectorRegistry}
+import io.prometheus.client.dropwizard.DropwizardExports
+import io.prometheus.client.exporter.PushGateway
+import io.prometheus.jmx.JmxCollector
+import org.apache.spark.internal.Logging
+import com.banzaicloud.metrics.prometheus.client.exporter.PushGatewayWithTimestamp
 import com.banzaicloud.metrics.prometheus.client.exporter.PushGatewayWithTimestamp
 import com.banzaicloud.spark.metrics.DropwizardExportsWithMetricNameTransform
 import com.codahale.metrics._
-import io.prometheus.client.{Collector, CollectorRegistry}
+import io.prometheus.client.CollectorRegistry
 import io.prometheus.client.dropwizard.DropwizardExports
 import org.apache.spark.internal.Logging
 import io.prometheus.jmx.JmxCollector
 import org.apache.spark.{SparkConf, SparkEnv}
 
 import scala.collection.JavaConverters._
+import scala.collection.immutable.ListMap
 import scala.util.{Failure, Success, Try}
 import scala.util.matching.Regex
 import PrometheusSink._
@@ -39,6 +50,7 @@ import PrometheusSink._
 import scala.collection.immutable.ListMap
 
 object PrometheusSink {
+
   trait SinkConfig extends Serializable {
     def metricsNamespace: Option[String]
     def sparkAppId: Option[String]
@@ -73,102 +85,65 @@ object PrometheusSink {
 
   // labels
   val KEY_LABELS = "labels"
+  val KEY_GROUP_KEY = "group-key"
 
 }
 
-abstract class PrometheusSink(property: Properties, registry: MetricRegistry)
-  extends Logging {
+abstract class PrometheusSink(property: Properties,
+                              registry: MetricRegistry,
+                              sinkConfig: PrometheusSink.SinkConfig,
+                              pushGatewayBuilder: URL => PushGateway
+                             )  extends Logging {
+  import sinkConfig._
 
   private val lbv = raw"(.+)\s*=\s*(.*)".r
 
   protected class Reporter(registry: MetricRegistry)
-      extends ScheduledReporter(registry,
-                                "prometheus-reporter",
-                                MetricFilter.ALL,
-                                TimeUnit.SECONDS,
-                                TimeUnit.MILLISECONDS) {
-
-    val defaultSparkConf: SparkConf = new SparkConf(true)
+    extends ScheduledReporter(
+      registry,
+      "prometheus-reporter",
+      MetricFilter.ALL,
+      TimeUnit.SECONDS,
+      TimeUnit.MILLISECONDS) {
 
     @throws(classOf[UnknownHostException])
-    override def report(gauges: util.SortedMap[String, Gauge[_]],
-                        counters: util.SortedMap[String, Counter],
-                        histograms: util.SortedMap[String, Histogram],
-                        meters: util.SortedMap[String, Meter],
-                        timers: util.SortedMap[String, Timer]): Unit = {
+    override def report(
+                         gauges: util.SortedMap[String, Gauge[_]],
+                         counters: util.SortedMap[String, Counter],
+                         histograms: util.SortedMap[String, Histogram],
+                         meters: util.SortedMap[String, Meter],
+                         timers: util.SortedMap[String, Timer]): Unit = {
 
-      // SparkEnv may become available only after metrics sink creation thus retrieving
-      // SparkConf from spark env here and not during the creation/initialisation of PrometheusSink.
-      val sparkConf: SparkConf =
-        Option(SparkEnv.get).map(_.conf).getOrElse(defaultSparkConf)
-
-      val metricsNamespace: Option[String] =
-        sparkConf.getOption("spark.metrics.namespace")
-      val sparkAppId: Option[String] = sparkConf.getOption("spark.app.id")
-      val sparkAppName: Option[String] = sparkConf.getOption("spark.app.name")
-      val executorId: Option[String] = sparkConf.getOption("spark.executor.id")
-
-      logInfo(
-        s"metricsNamespace=$metricsNamespace, sparkAppName=$sparkAppName, sparkAppId=$sparkAppId, " +
-          s"executorId=$executorId")
+      logInfo(s"metricsNamespace=$metricsNamespace, sparkAppName=$sparkAppName, sparkAppId=$sparkAppId, " +
+        s"executorId=$executorId")
 
       val labelsMap: Option[Map[String, String]] = collectLabels(sparkConf)
       logInfo(s"$KEY_LABELS -> ${labelsMap.getOrElse("")}")
       logInfo(s"$SPARK_METRIC_LABELS_CONF -> ${labelsMap.getOrElse("")}")
 
       val role: String = (sparkAppId, executorId) match {
-        case (Some(_), Some("driver")) | (Some(_), Some("<driver>")) => "driver"
-        case (Some(_), Some(_))                                      => "executor"
-        case _                                                       => "unknown"
+        case (Some(_), Some("driver")) | (Some(_), Some("<driver>"))=> "driver"
+        case (Some(_), Some(_)) => "executor"
+        case _ => "unknown"
       }
 
       val job: String = role match {
-        case "driver"   => metricsNamespace.getOrElse(sparkAppId.get)
+        case "driver" => metricsNamespace.getOrElse(sparkAppId.get)
         case "executor" => metricsNamespace.getOrElse(sparkAppId.get)
-        case _          => metricsNamespace.getOrElse("unknown")
+        case _ => metricsNamespace.getOrElse("unknown")
       }
 
-      val instance: String =
-        if (enableHostNameInInstance) InetAddress.getLocalHost.getHostName
-        else sparkAppId.getOrElse("")
+      val instance: String = if (enableHostNameInInstance) InetAddress.getLocalHost.getHostName else sparkAppId.getOrElse("")
 
       val appName: String = sparkAppName.getOrElse("")
 
       logInfo(s"role=$role, job=$job")
 
-      val groupingKey: Map[String, String] = (role, executorId) match {
-        case ("driver", _) =>
-          labelsMap match {
-            case Some(m) =>
-              Map("role" -> role, "app_name" -> appName, "instance" -> instance) ++ m
-            case _ =>
-              Map("role" -> role, "app_name" -> appName, "instance" -> instance)
-          }
+      val groupingKey = groupKeyMap.map { groupKey =>
+        customGroupKey(role, executorId, groupKey)
+      }.getOrElse(defaultGroupKey(role, executorId, appName, instance, labelsMap))
 
-        case ("executor", Some(id)) =>
-          labelsMap match {
-            case Some(m) =>
-              Map("role" -> role,
-                  "number" -> id,
-                  "app_name" -> appName,
-                  "instance" -> instance) ++ m
-            case _ =>
-              Map("role" -> role,
-                  "number" -> id,
-                  "app_name" -> appName,
-                  "instance" -> instance)
-          }
-
-        case _ => Map("role" -> role)
-      }
-
-      val metricTimestamp =
-        if (enableTimestamp) Some(s"${System.currentTimeMillis}") else None
-
-      pushGateway.pushAdd(pushRegistry,
-                          job,
-                          groupingKey.asJava,
-                          metricTimestamp.orNull)
+      pushGateway.pushAdd(pushRegistry, job, groupingKey.asJava)
     }
   }
 
@@ -179,9 +154,7 @@ abstract class PrometheusSink(property: Properties, registry: MetricRegistry)
 
   val pollUnit: TimeUnit =
     Option(property.getProperty(KEY_PUSH_PERIOD_UNIT))
-      .map { s =>
-        TimeUnit.valueOf(s.toUpperCase)
-      }
+      .map { s => TimeUnit.valueOf(s.toUpperCase) }
       .getOrElse(DEFAULT_PUSH_PERIOD_UNIT)
 
   val pushGatewayAddress =
@@ -197,14 +170,13 @@ abstract class PrometheusSink(property: Properties, registry: MetricRegistry)
       .map(_.toBoolean)
       .getOrElse(PUSHGATEWAY_ENABLE_TIMESTAMP)
 
-  val metricsNameCaptureRegex: Option[Regex] = {
-    val regexExpr = property.getProperty(KEY_METRICS_NAME_CAPTURE_REGEX)
-    Option(regexExpr).map(new Regex(_))
-  }
+  val metricsNameCaptureRegex: Option[Regex] =
+    Option(property.getProperty(KEY_METRICS_NAME_CAPTURE_REGEX))
+      .map(new Regex(_))
 
   val metricsNameReplacement: String =
     Option(property.getProperty(KEY_METRICS_NAME_REPLACEMENT))
-      .getOrElse("")
+        .getOrElse("")
 
   val toLowerCase: Boolean =
     Option(property.getProperty(KEY_METRICS_NAME_TO_LOWERCASE))
@@ -216,9 +188,11 @@ abstract class PrometheusSink(property: Properties, registry: MetricRegistry)
 
   // validate metrics name capture regex
   if (metricsNameCaptureRegex.isDefined && metricsNameReplacement == "") {
-    throw new IllegalArgumentException(
-      "Metrics name replacement must be specified if metrics name capture regexp is set !")
+    throw new IllegalArgumentException("Metrics name replacement must be specified if metrics name capture regexp is set !")
   }
+
+  val labelsMap = parseLabels(KEY_LABELS).getOrElse(Map.empty[String, String])
+  val groupKeyMap = parseLabels(KEY_GROUP_KEY)
 
   val enableDropwizardCollector: Boolean =
     Option(property.getProperty(KEY_ENABLE_DROPWIZARD_COLLECTOR))
@@ -243,31 +217,35 @@ abstract class PrometheusSink(property: Properties, registry: MetricRegistry)
   logInfo(s"Metrics timestamp enabled -> $enableTimestamp")
   logInfo(s"$KEY_PUSHGATEWAY_ADDRESS -> $pushGatewayAddress")
   logInfo(s"$KEY_PUSHGATEWAY_ADDRESS_PROTOCOL -> $pushGatewayAddressProtocol")
-  logInfo(
-    s"$KEY_METRICS_NAME_CAPTURE_REGEX -> ${metricsNameCaptureRegex.getOrElse("")}")
+  logInfo(s"$KEY_METRICS_NAME_CAPTURE_REGEX -> ${metricsNameCaptureRegex.getOrElse("")}")
   logInfo(s"$KEY_METRICS_NAME_REPLACEMENT -> $metricsNameReplacement")
   logInfo(s"$KEY_METRICS_NAME_TO_LOWERCASE -> $toLowerCase")
-
+  logInfo(s"$KEY_LABELS -> ${labelsMap}")
   logInfo(s"$KEY_JMX_COLLECTOR_CONFIG -> $jmxCollectorConfig")
 
-  val pushRegistry: CollectorRegistry = CollectorRegistry.defaultRegistry
+  val pushRegistry: CollectorRegistry = new DeduplicatedCollectorRegistry()
 
-  lazy val sparkMetricExports: DropwizardExports =
-    metricsNameCaptureRegex match {
-      case Some(r) =>
-        new DropwizardExportsWithMetricNameTransform(registry,
-                                                     r,
-                                                     metricsNameReplacement,
-                                                     toLowerCase)
-      case _ => new com.banzaicloud.spark.metrics.DropwizardExports(registry)
-    }
+  private val pushTimestamp = if (enableTimestamp) Some(PushTimestampProvider()) else None
 
-  lazy val jmxMetrics: JmxCollector = new JmxCollector(
-    new File(jmxCollectorConfig))
+  //  lazy val sparkMetricExports: DropwizardExports =
+  //    metricsNameCaptureRegex match {
+  //      case Some(r) =>
+  //        new DropwizardExportsWithMetricNameTransform(registry,
+  //                                                     r,
+  //                                                     metricsNameReplacement,
+  //                                                     toLowerCase)
+  //      case _ => new com.banzaicloud.spark.metrics.DropwizardExports(registry)
+  //    }
 
-  val pushGateway: PushGatewayWithTimestamp =
-    new PushGatewayWithTimestamp(
-      s"$pushGatewayAddressProtocol://$pushGatewayAddress")
+  private val replace = metricsNameCaptureRegex.map(Replace(_, metricsNameReplacement))
+
+  lazy val sparkMetricExports = new SparkDropwizardExports(registry, replace, labelsMap, pushTimestamp)
+
+  lazy val jmxMetrics: JmxCollector = new JmxCollector(new File(jmxCollectorConfig))
+
+  lazy val jmxMetrics = new SparkJmxExports(new JmxCollector(new File(jmxCollectorConfig)), labelsMap, pushTimestamp)
+
+  val pushGateway: PushGateway = pushGatewayBuilder(new URL(s"$pushGatewayAddressProtocol://$pushGatewayAddress"))
 
   val reporter = new Reporter(registry)
 
@@ -312,12 +290,57 @@ abstract class PrometheusSink(property: Properties, registry: MetricRegistry)
     }
   }
 
-  private def parseLabels(labels: String): Try[Map[String, String]] = {
-    val kvs = labels.split(',')
-    val parsedLabels = Try(kvs.map(parseLabel).toMap)
 
-    parsedLabels
+//  private def parseLabels(labels: String): Try[Map[String, String]] = {
+//    val kvs = labels.split(',')
+//    val parsedLabels = Try(kvs.map(parseLabel).toMap)
+//
+//    parsedLabels
+//  }
+
+  private def parseLabels(key: String): Option[Map[String, String]] = {
+    Option(property.getProperty(key)).map { labelsString =>
+      val kvs = labelsString.split(',')
+      val parsedLabels = kvs.map(parseLabel)
+      ListMap(parsedLabels: _*) // List map to preserve labels order which might be important for group key
+    }
   }
+
+  /**
+   * Default group key use instance name. So for every spark job instance it will create new metric group in the Push Gateway.
+   * This may lead to OOM errors.
+   * This method exists for backward compatibility.
+   */
+  private def defaultGroupKey(role: String,
+                              executorId: Option[String],
+                              appName: String,
+                              instance: String,
+                              labels: Map[String, String]) = {
+    (role, executorId) match {
+      case ("driver", _) =>
+        ListMap("role" -> role, "app_name" -> appName, "instance" -> instance) ++ labels
+
+      case ("executor", Some(id)) =>
+        ListMap("role" -> role, "app_name" -> appName, "instance" -> instance, "number" -> id) ++ labels
+      case _ =>
+        ListMap("role" -> role)
+    }
+  }
+
+  private def customGroupKey(role: String,
+                             executorId: Option[String],
+                             labels: Map[String, String]) = {
+    (role, executorId) match {
+      case ("driver", _) =>
+        ListMap("role" -> role) ++ labels
+
+      case ("executor", Some(id)) =>
+        ListMap("role" -> role, "number" -> id) ++ labels
+      case _ =>
+        ListMap("role" -> role)
+    }
+  }
+
 
   // an attempt to pass labels via env vars
   private def collectEnvLabels(sparkConf: SparkConf): Map[String, String] = {
