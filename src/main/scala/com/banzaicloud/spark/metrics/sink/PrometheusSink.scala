@@ -22,23 +22,21 @@ import java.util
 import java.util.Properties
 import java.util.concurrent.TimeUnit
 
+import com.banzaicloud.spark.metrics.NameDecorator.Replace
 import com.banzaicloud.spark.metrics.PushTimestampDecorator.PushTimestampProvider
 import com.banzaicloud.spark.metrics.{DeduplicatedCollectorRegistry, SparkDropwizardExports, SparkJmxExports}
-import io.prometheus.client.Collector
-import io.prometheus.client.exporter.PushGateway
 import com.codahale.metrics._
-import io.prometheus.client.CollectorRegistry
-import org.apache.spark.internal.Logging
+import io.prometheus.client.{Collector, CollectorRegistry}
+import io.prometheus.client.exporter.PushGateway
 import io.prometheus.jmx.JmxCollector
+import org.apache.spark.internal.Logging
 import org.apache.spark.{SparkConf, SparkEnv}
 
 import scala.collection.JavaConverters._
-import scala.util.{Failure, Success, Try}
+import scala.collection.immutable.ListMap
+import scala.util.Try
 import scala.util.matching.Regex
 import PrometheusSink._
-import com.banzaicloud.spark.metrics.NameDecorator.Replace
-
-import scala.collection.immutable.ListMap
 
 object PrometheusSink {
 
@@ -97,8 +95,6 @@ abstract class PrometheusSink(property: Properties,
       TimeUnit.SECONDS,
       TimeUnit.MILLISECONDS) {
 
-    val defaultSparkConf: SparkConf = new SparkConf(true)
-
     @throws(classOf[UnknownHostException])
     override def report(
                          gauges: util.SortedMap[String, Gauge[_]],
@@ -107,16 +103,8 @@ abstract class PrometheusSink(property: Properties,
                          meters: util.SortedMap[String, Meter],
                          timers: util.SortedMap[String, Timer]): Unit = {
 
-      // SparkEnv may become available only after metrics sink creation thus retrieving
-      // SparkConf from spark env here and not during the creation/initialisation of PrometheusSink.
-      val sparkConf: SparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(defaultSparkConf)
-
       logInfo(s"metricsNamespace=$metricsNamespace, sparkAppName=$sparkAppName, sparkAppId=$sparkAppId, " +
         s"executorId=$executorId")
-
-      val labelsMap: Map[String, String] = collectLabels(sparkConf)
-      logInfo(s"$KEY_LABELS -> ${labelsMap}")
-      logInfo(s"$SPARK_METRIC_LABELS_CONF -> ${labelsMap}")
 
       val role: String = (sparkAppId, executorId) match {
         case (Some(_), Some("driver")) | (Some(_), Some("<driver>"))=> "driver"
@@ -188,7 +176,12 @@ abstract class PrometheusSink(property: Properties,
     throw new IllegalArgumentException("Metrics name replacement must be specified if metrics name capture regexp is set !")
   }
 
-  val labelsMap = parseLabels(KEY_LABELS).getOrElse(Map.empty[String, String])
+  val defaultSparkConf: SparkConf = new SparkConf(true)
+  // SparkEnv may become available only after metrics sink creation thus retrieving
+  // SparkConf from spark env here and not during the creation/initialisation of PrometheusSink.
+  val sparkConf: SparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(defaultSparkConf)
+  val labelsMap: Map[String, String] = collectLabels(sparkConf)
+
   val groupKeyMap = parseLabels(KEY_GROUP_KEY)
 
   val enableDropwizardCollector: Boolean =
@@ -261,8 +254,8 @@ abstract class PrometheusSink(property: Properties,
   private def checkMinimalPollingPeriod(pollUnit: TimeUnit, pollPeriod: Int) {
     val period = TimeUnit.SECONDS.convert(pollPeriod, pollUnit)
     if (period < 1) {
-      throw new IllegalArgumentException(
-        s"Polling period $pollPeriod $pollUnit below than minimal polling period ")
+      throw new IllegalArgumentException("Polling period " + pollPeriod + " " + pollUnit +
+        " below than minimal polling period ")
     }
   }
 
@@ -270,10 +263,10 @@ abstract class PrometheusSink(property: Properties,
     label match {
       case lbv(label, value) => (Collector.sanitizeMetricName(label), value)
       case _ =>
-        throw new IllegalArgumentException(
-          "Can not parse labels ! Labels should be in label=value separated by commas format.")
+        throw new IllegalArgumentException("Can not parse labels ! Labels should be in label=value separated by commas format.")
     }
   }
+
 
   private def parseLabels(key: String): Option[Map[String, String]] = {
     Option(property.getProperty(key)).map { labelsString =>
@@ -284,15 +277,15 @@ abstract class PrometheusSink(property: Properties,
   }
 
   /**
-   * Default group key use instance name. So for every spark job instance it will create new metric group in the Push Gateway.
-   * This may lead to OOM errors.
-   * This method exists for backward compatibility.
-   */
+    * Default group key use instance name. So for every spark job instance it will create new metric group in the Push Gateway.
+    * This may lead to OOM errors.
+    * This method exists for backward compatibility.
+    */
   private def defaultGroupKey(role: String,
                               executorId: Option[String],
                               appName: String,
                               instance: String,
-                              labels: Map[String, String]) = {
+                              labels: Map[String, String]): ListMap[String, String] = {
     (role, executorId) match {
       case ("driver", _) =>
         ListMap("role" -> role, "app_name" -> appName, "instance" -> instance) ++ labels
@@ -304,32 +297,26 @@ abstract class PrometheusSink(property: Properties,
     }
   }
 
+  /**
+    * 2 sources for labels:
+    *  1. from SparkConf
+    *  2. property labels
+    * @return
+    */
+  private def collectLabels(sparkConf: SparkConf): Map[String, String] = {
+    val configLabels = Option(property.getProperty(KEY_LABELS))
+        .flatMap(parseLabels).getOrElse(Map.empty)
+
+    val sparkConfLabels = collectLabelsFromSparkConf(sparkConf)
+    configLabels ++ sparkConfLabels
+  }
+
   private def collectLabelsFromSparkConf(sparkConf: SparkConf): Map[String, String] = {
     val kvs = sparkConf.get(SPARK_METRIC_LABELS_CONF, "")
     if (kvs.isEmpty) {
       return Map.empty
     }
     kvs.split(",").map(parseLabel).toMap
-  }
-
-  /**
-    * 2 sources for labels:
-    *  1. from config
-    *  2.
-    * @return
-    */
-  private def collectLabels(sparkConf: SparkConf): Map[String, String] = {
-    // parse labels
-    val configLabels = Option(property.getProperty(KEY_LABELS))
-        .flatMap(parseLabels)
-
-    val configLabelsMap = configLabels match {
-      case Some(lm)  => lm
-      case _                  => Map.empty
-    }
-
-    val envLabels = collectLabelsFromSparkConf(sparkConf)
-    configLabelsMap ++ envLabels
   }
 
   private def customGroupKey(role: String,
