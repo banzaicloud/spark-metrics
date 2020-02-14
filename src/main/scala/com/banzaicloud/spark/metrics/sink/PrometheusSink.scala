@@ -22,30 +22,21 @@ import java.util
 import java.util.Properties
 import java.util.concurrent.TimeUnit
 
-import com.banzaicloud.spark.metrics.NameDecorator.Replace
 import com.banzaicloud.spark.metrics.PushTimestampDecorator.PushTimestampProvider
 import com.banzaicloud.spark.metrics.{DeduplicatedCollectorRegistry, SparkDropwizardExports, SparkJmxExports}
-import com.codahale.metrics._
-import io.prometheus.client.{Collector, CollectorRegistry}
-import io.prometheus.client.dropwizard.DropwizardExports
+import io.prometheus.client.Collector
 import io.prometheus.client.exporter.PushGateway
-import io.prometheus.jmx.JmxCollector
-import org.apache.spark.internal.Logging
-import com.banzaicloud.metrics.prometheus.client.exporter.PushGatewayWithTimestamp
-import com.banzaicloud.metrics.prometheus.client.exporter.PushGatewayWithTimestamp
-import com.banzaicloud.spark.metrics.DropwizardExportsWithMetricNameTransform
 import com.codahale.metrics._
 import io.prometheus.client.CollectorRegistry
-import io.prometheus.client.dropwizard.DropwizardExports
 import org.apache.spark.internal.Logging
 import io.prometheus.jmx.JmxCollector
 import org.apache.spark.{SparkConf, SparkEnv}
 
 import scala.collection.JavaConverters._
-import scala.collection.immutable.ListMap
 import scala.util.{Failure, Success, Try}
 import scala.util.matching.Regex
 import PrometheusSink._
+import com.banzaicloud.spark.metrics.NameDecorator.Replace
 
 import scala.collection.immutable.ListMap
 
@@ -106,6 +97,8 @@ abstract class PrometheusSink(property: Properties,
       TimeUnit.SECONDS,
       TimeUnit.MILLISECONDS) {
 
+    val defaultSparkConf: SparkConf = new SparkConf(true)
+
     @throws(classOf[UnknownHostException])
     override def report(
                          gauges: util.SortedMap[String, Gauge[_]],
@@ -114,12 +107,16 @@ abstract class PrometheusSink(property: Properties,
                          meters: util.SortedMap[String, Meter],
                          timers: util.SortedMap[String, Timer]): Unit = {
 
+      // SparkEnv may become available only after metrics sink creation thus retrieving
+      // SparkConf from spark env here and not during the creation/initialisation of PrometheusSink.
+      val sparkConf: SparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(defaultSparkConf)
+
       logInfo(s"metricsNamespace=$metricsNamespace, sparkAppName=$sparkAppName, sparkAppId=$sparkAppId, " +
         s"executorId=$executorId")
 
-      val labelsMap: Option[Map[String, String]] = collectLabels(sparkConf)
-      logInfo(s"$KEY_LABELS -> ${labelsMap.getOrElse("")}")
-      logInfo(s"$SPARK_METRIC_LABELS_CONF -> ${labelsMap.getOrElse("")}")
+      val labelsMap: Map[String, String] = collectLabels(sparkConf)
+      logInfo(s"$KEY_LABELS -> ${labelsMap}")
+      logInfo(s"$SPARK_METRIC_LABELS_CONF -> ${labelsMap}")
 
       val role: String = (sparkAppId, executorId) match {
         case (Some(_), Some("driver")) | (Some(_), Some("<driver>"))=> "driver"
@@ -227,21 +224,9 @@ abstract class PrometheusSink(property: Properties,
 
   private val pushTimestamp = if (enableTimestamp) Some(PushTimestampProvider()) else None
 
-  //  lazy val sparkMetricExports: DropwizardExports =
-  //    metricsNameCaptureRegex match {
-  //      case Some(r) =>
-  //        new DropwizardExportsWithMetricNameTransform(registry,
-  //                                                     r,
-  //                                                     metricsNameReplacement,
-  //                                                     toLowerCase)
-  //      case _ => new com.banzaicloud.spark.metrics.DropwizardExports(registry)
-  //    }
-
-  private val replace = metricsNameCaptureRegex.map(Replace(_, metricsNameReplacement))
+  private val replace = metricsNameCaptureRegex.map(Replace(_, metricsNameReplacement, toLowerCase))
 
   lazy val sparkMetricExports = new SparkDropwizardExports(registry, replace, labelsMap, pushTimestamp)
-
-  lazy val jmxMetrics: JmxCollector = new JmxCollector(new File(jmxCollectorConfig))
 
   lazy val jmxMetrics = new SparkJmxExports(new JmxCollector(new File(jmxCollectorConfig)), labelsMap, pushTimestamp)
 
@@ -290,14 +275,6 @@ abstract class PrometheusSink(property: Properties,
     }
   }
 
-
-//  private def parseLabels(labels: String): Try[Map[String, String]] = {
-//    val kvs = labels.split(',')
-//    val parsedLabels = Try(kvs.map(parseLabel).toMap)
-//
-//    parsedLabels
-//  }
-
   private def parseLabels(key: String): Option[Map[String, String]] = {
     Option(property.getProperty(key)).map { labelsString =>
       val kvs = labelsString.split(',')
@@ -327,23 +304,7 @@ abstract class PrometheusSink(property: Properties,
     }
   }
 
-  private def customGroupKey(role: String,
-                             executorId: Option[String],
-                             labels: Map[String, String]) = {
-    (role, executorId) match {
-      case ("driver", _) =>
-        ListMap("role" -> role) ++ labels
-
-      case ("executor", Some(id)) =>
-        ListMap("role" -> role, "number" -> id) ++ labels
-      case _ =>
-        ListMap("role" -> role)
-    }
-  }
-
-
-  // an attempt to pass labels via env vars
-  private def collectEnvLabels(sparkConf: SparkConf): Map[String, String] = {
+  private def collectLabelsFromSparkConf(sparkConf: SparkConf): Map[String, String] = {
     val kvs = sparkConf.get(SPARK_METRIC_LABELS_CONF, "")
     if (kvs.isEmpty) {
       return Map.empty
@@ -353,24 +314,22 @@ abstract class PrometheusSink(property: Properties,
 
   /**
     * 2 sources for labels:
-    * 1. from config
+    *  1. from config
+    *  2.
     * @return
     */
-  private def collectLabels(
-      sparkConf: SparkConf): Option[Map[String, String]] = {
+  private def collectLabels(sparkConf: SparkConf): Map[String, String] = {
     // parse labels
-    val configLabels: Option[Try[Map[String, String]]] =
-      Option(property.getProperty(KEY_LABELS))
-        .map(parseLabels)
+    val configLabels = Option(property.getProperty(KEY_LABELS))
+        .flatMap(parseLabels)
 
     val configLabelsMap = configLabels match {
-      case Some(Success(lm))  => lm
-      case Some(Failure(err)) => throw err
+      case Some(lm)  => lm
       case _                  => Map.empty
     }
 
-    val envLabels = collectEnvLabels(sparkConf)
-    Option(configLabelsMap ++ envLabels)
+    val envLabels = collectLabelsFromSparkConf(sparkConf)
+    configLabelsMap ++ envLabels
   }
 
   private def customGroupKey(role: String,
