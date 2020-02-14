@@ -1,5 +1,6 @@
 package com.banzaicloud.spark.metrics
 
+import java.util.Properties
 import java.util.concurrent.atomic.AtomicLong
 
 import com.codahale.metrics.MetricRegistry
@@ -89,6 +90,34 @@ class SparkCollectorDecoratorsSuite {
       Assert.assertTrue(sample.name.startsWith("test_metric_sample__2__"))
     }
 
+  }
+
+  @Test
+  def testNameReplaceFromProperties(): Unit = new Fixture {
+
+    val props = new Properties()
+    props.load(getClass.getResourceAsStream("/spark-prometheus-metrics.conf"))
+    val regexExpr = props.getProperty("*.sink.prometheus.metrics-name-capture-regex")
+    val regexReplacement = props.getProperty("*.sink.prometheus.metrics-name-replacement")
+
+    val metricsNameReplace = NameDecorator.Replace(
+      regexExpr.r,
+      regexReplacement,
+      toLowerCase = true
+    )
+
+    val metricsExports = new SparkDropwizardExports(registry, Some(metricsNameReplace), Map.empty, None)
+    registry.counter("spark_0e665960e096446f97dbf56067cdc0b8_driver_DAGScheduler_stage_runningStages").inc()
+    registry.counter("spark_0e665960e096446f97dbf56067cdc0b8_2_executor_filesystem_hdfs_read_bytes").inc()
+    registry.counter("local_1575556728496_driver_LiveListenerBus_numEventsPosted").inc()
+    registry.counter("metrics_spark_c1bd069243c54a249a02207158a2fbee_driver_livelistenerbus_listenerprocessingtime_org_apache_spark_status_appstatuslistener_count").inc()
+    metricsExports.register(pushRegistry)
+
+    val exportedMetricNames = getExportedMetrics.map(_.name)
+    exportedMetricNames.contains("driver_dagscheduler_stage_runningstages")
+    exportedMetricNames.contains("executor_filesystem_hdfs_read_bytes")
+    exportedMetricNames.contains("driver_livelistenerbus_numeventsposted")
+    exportedMetricNames.contains("driver_livelistenerbus_listenerprocessingtime_org_apache_spark_status_appstatuslistener_count")
   }
 
   @Test def testStaticHelpMessage(): Unit = new Fixture { // given

@@ -27,24 +27,57 @@ import com.banzaicloud.spark.metrics.PushTimestampDecorator.PushTimestampProvide
 import com.banzaicloud.spark.metrics.{DeduplicatedCollectorRegistry, SparkDropwizardExports, SparkJmxExports}
 import com.codahale.metrics._
 import io.prometheus.client.{Collector, CollectorRegistry}
-import io.prometheus.client.dropwizard.DropwizardExports
 import io.prometheus.client.exporter.PushGateway
 import io.prometheus.jmx.JmxCollector
 import org.apache.spark.internal.Logging
+import org.apache.spark.{SparkConf, SparkEnv}
 
 import scala.collection.JavaConverters._
 import scala.collection.immutable.ListMap
 import scala.util.Try
 import scala.util.matching.Regex
+import PrometheusSink._
 
 object PrometheusSink {
+
   trait SinkConfig extends Serializable {
     def metricsNamespace: Option[String]
     def sparkAppId: Option[String]
     def sparkAppName: Option[String]
     def executorId: Option[String]
   }
+
+  val DEFAULT_PUSH_PERIOD: Int = 10
+  val DEFAULT_PUSH_PERIOD_UNIT: TimeUnit = TimeUnit.SECONDS
+  val DEFAULT_PUSHGATEWAY_ADDRESS: String = "127.0.0.1:9091"
+  val DEFAULT_PUSHGATEWAY_ADDRESS_PROTOCOL: String = "http"
+  val PUSHGATEWAY_ENABLE_TIMESTAMP: Boolean = false
+
+  val KEY_PUSH_PERIOD = "period"
+  val KEY_PUSH_PERIOD_UNIT = "unit"
+  val KEY_PUSHGATEWAY_ADDRESS = "pushgateway-address"
+  val KEY_PUSHGATEWAY_ADDRESS_PROTOCOL = "pushgateway-address-protocol"
+  val KEY_PUSHGATEWAY_ENABLE_TIMESTAMP = "pushgateway-enable-timestamp"
+  val DEFAULT_KEY_JMX_COLLECTOR_CONFIG = "/opt/spark/conf/jmx_collector.yaml"
+
+  // metrics name replacement
+  val KEY_METRICS_NAME_CAPTURE_REGEX = "metrics-name-capture-regex"
+  val KEY_METRICS_NAME_REPLACEMENT = "metrics-name-replacement"
+  val KEY_METRICS_NAME_TO_LOWERCASE = "metrics-name-to-lowercase"
+
+  val SPARK_METRIC_LABELS_CONF = "spark.SPARK_METRIC_LABELS"
+
+  val KEY_ENABLE_DROPWIZARD_COLLECTOR = "enable-dropwizard-collector"
+  val KEY_ENABLE_JMX_COLLECTOR = "enable-jmx-collector"
+  val KEY_ENABLE_HOSTNAME_IN_INSTANCE = "enable-hostname-in-instance"
+  val KEY_JMX_COLLECTOR_CONFIG = "jmx-collector-config"
+
+  // labels
+  val KEY_LABELS = "labels"
+  val KEY_GROUP_KEY = "group-key"
+
 }
+
 abstract class PrometheusSink(property: Properties,
                               registry: MetricRegistry,
                               sinkConfig: PrometheusSink.SinkConfig,
@@ -99,32 +132,6 @@ abstract class PrometheusSink(property: Properties,
     }
   }
 
-  val DEFAULT_PUSH_PERIOD: Int = 10
-  val DEFAULT_PUSH_PERIOD_UNIT: TimeUnit = TimeUnit.SECONDS
-  val DEFAULT_PUSHGATEWAY_ADDRESS: String = "127.0.0.1:9091"
-  val DEFAULT_PUSHGATEWAY_ADDRESS_PROTOCOL: String = "http"
-  val PUSHGATEWAY_ENABLE_TIMESTAMP: Boolean = false
-
-  val KEY_PUSH_PERIOD = "period"
-  val KEY_PUSH_PERIOD_UNIT = "unit"
-  val KEY_PUSHGATEWAY_ADDRESS = "pushgateway-address"
-  val KEY_PUSHGATEWAY_ADDRESS_PROTOCOL = "pushgateway-address-protocol"
-  val KEY_PUSHGATEWAY_ENABLE_TIMESTAMP = "pushgateway-enable-timestamp"
-  val DEFAULT_KEY_JMX_COLLECTOR_CONFIG = "/opt/spark/conf/jmx_collector.yaml"
-
-  // metrics name replacement
-  val KEY_METRICS_NAME_CAPTURE_REGEX = "metrics-name-capture-regex"
-  val KEY_METRICS_NAME_REPLACEMENT = "metrics-name-replacement"
-
-  val KEY_ENABLE_DROPWIZARD_COLLECTOR = "enable-dropwizard-collector"
-  val KEY_ENABLE_JMX_COLLECTOR = "enable-jmx-collector"
-  val KEY_ENABLE_HOSTNAME_IN_INSTANCE = "enable-hostname-in-instance"
-  val KEY_JMX_COLLECTOR_CONFIG = "jmx-collector-config"
-
- // labels
- val KEY_LABELS = "labels"
- val KEY_GROUP_KEY = "group-key"
-
   val pollPeriod: Int =
     Option(property.getProperty(KEY_PUSH_PERIOD))
       .map(_.toInt)
@@ -156,6 +163,11 @@ abstract class PrometheusSink(property: Properties,
     Option(property.getProperty(KEY_METRICS_NAME_REPLACEMENT))
         .getOrElse("")
 
+  val toLowerCase: Boolean =
+    Option(property.getProperty(KEY_METRICS_NAME_TO_LOWERCASE))
+      .map(_.toBoolean)
+      .getOrElse(false)
+
   // validate pushgateway host:port
   Try(new URI(s"$pushGatewayAddressProtocol://$pushGatewayAddress")).get
 
@@ -164,7 +176,12 @@ abstract class PrometheusSink(property: Properties,
     throw new IllegalArgumentException("Metrics name replacement must be specified if metrics name capture regexp is set !")
   }
 
-  val labelsMap = parseLabels(KEY_LABELS).getOrElse(Map.empty[String, String])
+  val defaultSparkConf: SparkConf = new SparkConf(true)
+  // SparkEnv may become available only after metrics sink creation thus retrieving
+  // SparkConf from spark env here and not during the creation/initialisation of PrometheusSink.
+  val sparkConf: SparkConf = Option(SparkEnv.get).map(_.conf).getOrElse(defaultSparkConf)
+  val labelsMap: Map[String, String] = collectLabels(sparkConf)
+
   val groupKeyMap = parseLabels(KEY_GROUP_KEY)
 
   val enableDropwizardCollector: Boolean =
@@ -192,6 +209,7 @@ abstract class PrometheusSink(property: Properties,
   logInfo(s"$KEY_PUSHGATEWAY_ADDRESS_PROTOCOL -> $pushGatewayAddressProtocol")
   logInfo(s"$KEY_METRICS_NAME_CAPTURE_REGEX -> ${metricsNameCaptureRegex.getOrElse("")}")
   logInfo(s"$KEY_METRICS_NAME_REPLACEMENT -> $metricsNameReplacement")
+  logInfo(s"$KEY_METRICS_NAME_TO_LOWERCASE -> $toLowerCase")
   logInfo(s"$KEY_LABELS -> ${labelsMap}")
   logInfo(s"$KEY_JMX_COLLECTOR_CONFIG -> $jmxCollectorConfig")
 
@@ -199,7 +217,7 @@ abstract class PrometheusSink(property: Properties,
 
   private val pushTimestamp = if (enableTimestamp) Some(PushTimestampProvider()) else None
 
-  private val replace = metricsNameCaptureRegex.map(Replace(_, metricsNameReplacement))
+  private val replace = metricsNameCaptureRegex.map(Replace(_, metricsNameReplacement, toLowerCase))
 
   lazy val sparkMetricExports = new SparkDropwizardExports(registry, replace, labelsMap, pushTimestamp)
 
@@ -267,7 +285,7 @@ abstract class PrometheusSink(property: Properties,
                               executorId: Option[String],
                               appName: String,
                               instance: String,
-                              labels: Map[String, String]) = {
+                              labels: Map[String, String]): ListMap[String, String] = {
     (role, executorId) match {
       case ("driver", _) =>
         ListMap("role" -> role, "app_name" -> appName, "instance" -> instance) ++ labels
@@ -279,9 +297,31 @@ abstract class PrometheusSink(property: Properties,
     }
   }
 
+  /**
+    * 2 sources for labels:
+    *  1. from SparkConf
+    *  2. property labels
+    * @return
+    */
+  private def collectLabels(sparkConf: SparkConf): Map[String, String] = {
+    val configLabels = Option(property.getProperty(KEY_LABELS))
+        .flatMap(parseLabels).getOrElse(Map.empty)
+
+    val sparkConfLabels = collectLabelsFromSparkConf(sparkConf)
+    configLabels ++ sparkConfLabels
+  }
+
+  private def collectLabelsFromSparkConf(sparkConf: SparkConf): Map[String, String] = {
+    val kvs = sparkConf.get(SPARK_METRIC_LABELS_CONF, "")
+    if (kvs.isEmpty) {
+      return Map.empty
+    }
+    kvs.split(",").map(parseLabel).toMap
+  }
+
   private def customGroupKey(role: String,
                              executorId: Option[String],
-                             labels: Map[String, String]) = {
+                             labels: Map[String, String]): ListMap[String, String] = {
     (role, executorId) match {
       case ("driver", _) =>
         ListMap("role" -> role) ++ labels

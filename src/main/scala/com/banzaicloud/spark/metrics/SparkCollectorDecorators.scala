@@ -6,7 +6,6 @@ import com.banzaicloud.spark.metrics.CollectorDecorator.FamilyBuilder
 import com.banzaicloud.spark.metrics.PushTimestampDecorator.PushTimestampProvider
 import com.codahale.metrics.MetricRegistry
 import io.prometheus.client.Collector.MetricFamilySamples
-import io.prometheus.client.Collector.MetricFamilySamples.Sample
 import io.prometheus.client.dropwizard.DropwizardExports
 import io.prometheus.jmx.JmxCollector
 
@@ -14,7 +13,7 @@ import scala.collection.JavaConverters._
 import scala.util.matching.Regex
 
 object NameDecorator {
-  case class Replace(Regex: Regex, replacement: String)
+  case class Replace(Regex: Regex, replacement: String, toLowerCase: Boolean = false)
 }
 
 trait NameDecorator extends CollectorDecorator {
@@ -31,7 +30,13 @@ trait NameDecorator extends CollectorDecorator {
 
   private def replaceName(name: String) = {
     metricsNameReplace.map {
-      case NameDecorator.Replace(regex, replacement) => regex.replaceAllIn(name, replacement)
+      case NameDecorator.Replace(regex, replacement, toLowerCase) =>
+          val metricNameByReplacement = regex.replaceAllIn(name, replacement)
+
+          if (toLowerCase) {
+            metricNameByReplacement.toLowerCase
+          } else metricNameByReplacement
+
     }.getOrElse(name)
   }
 }
