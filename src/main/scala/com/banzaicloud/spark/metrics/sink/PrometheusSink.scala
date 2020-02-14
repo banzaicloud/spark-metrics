@@ -82,7 +82,7 @@ abstract class PrometheusSink(property: Properties,
                               registry: MetricRegistry,
                               sinkConfig: PrometheusSink.SinkConfig,
                               pushGatewayBuilder: URL => PushGateway
-                             )  extends Logging {
+                              )  extends Logging {
   import sinkConfig._
 
   private val lbv = raw"(.+)\s*=\s*(.*)".r
