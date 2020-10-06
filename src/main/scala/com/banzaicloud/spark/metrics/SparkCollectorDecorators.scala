@@ -82,20 +82,42 @@ trait PushTimestampDecorator extends CollectorDecorator {
 trait ConstantHelpDecorator extends CollectorDecorator {
   val constatntHelp: String
 
-  protected override val familyBuilder = super.familyBuilder.copy(
+  protected override def familyBuilder = super.familyBuilder.copy(
       helpMessage = _ => constatntHelp
   )
+}
+
+object FilterDecorator {
+  case class Filter(Regex: Regex)
+}
+
+trait FilterDecorator extends CollectorDecorator {
+  val metricsNameFilter: Option[FilterDecorator.Filter]
+
+  protected override def familyBuilder = super.familyBuilder.copy(
+    keepFamily = mfs => filter(mfs.name)
+  )
+
+  private def filter(name: String): Boolean =
+    metricsNameFilter.forall {
+      case FilterDecorator.Filter(regex) => name match {
+        case regex() => true
+        case _ => false
+      }
+    }
 }
 
 class SparkDropwizardExports(private val registry: MetricRegistry,
                              override val metricsNameReplace: Option[NameDecorator.Replace],
                              override val extraLabels: Map[String, String],
-                             override val maybeTimestampProvider: Option[PushTimestampProvider])
+                             override val maybeTimestampProvider: Option[PushTimestampProvider],
+                             override val metricsNameFilter: Option[FilterDecorator.Filter])
   extends CollectorDecorator(new DropwizardExports(registry))
     with NameDecorator
     with LabelsDecorator
     with PushTimestampDecorator
-    with ConstantHelpDecorator {
+    with ConstantHelpDecorator
+    with FilterDecorator {
   override val constatntHelp: String = "Generated from Dropwizard metric import"
 }
 

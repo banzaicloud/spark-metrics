@@ -22,6 +22,7 @@ import java.util
 import java.util.Properties
 import java.util.concurrent.TimeUnit
 
+import com.banzaicloud.spark.metrics.FilterDecorator.Filter
 import com.banzaicloud.spark.metrics.NameDecorator.Replace
 import com.banzaicloud.spark.metrics.PushTimestampDecorator.PushTimestampProvider
 import com.banzaicloud.spark.metrics.{DeduplicatedCollectorRegistry, SparkDropwizardExports, SparkJmxExports}
@@ -116,6 +117,8 @@ abstract class PrometheusSink(property: Properties,
   val KEY_METRICS_NAME_CAPTURE_REGEX = "metrics-name-capture-regex"
   val KEY_METRICS_NAME_REPLACEMENT = "metrics-name-replacement"
 
+  val KEY_METRICS_NAME_FILTER_REGEX = "metrics-name-filter-regex"
+
   val KEY_ENABLE_DROPWIZARD_COLLECTOR = "enable-dropwizard-collector"
   val KEY_ENABLE_JMX_COLLECTOR = "enable-jmx-collector"
   val KEY_ENABLE_HOSTNAME_IN_INSTANCE = "enable-hostname-in-instance"
@@ -156,6 +159,10 @@ abstract class PrometheusSink(property: Properties,
     Option(property.getProperty(KEY_METRICS_NAME_REPLACEMENT))
         .getOrElse("")
 
+  val metricsNameFilterRegex: Option[Regex] =
+    Option(property.getProperty(KEY_METRICS_NAME_FILTER_REGEX))
+      .map(new Regex(_))
+
   // validate pushgateway host:port
   Try(new URI(s"$pushGatewayAddressProtocol://$pushGatewayAddress")).get
 
@@ -192,6 +199,7 @@ abstract class PrometheusSink(property: Properties,
   logInfo(s"$KEY_PUSHGATEWAY_ADDRESS_PROTOCOL -> $pushGatewayAddressProtocol")
   logInfo(s"$KEY_METRICS_NAME_CAPTURE_REGEX -> ${metricsNameCaptureRegex.getOrElse("")}")
   logInfo(s"$KEY_METRICS_NAME_REPLACEMENT -> $metricsNameReplacement")
+  logInfo(s"$KEY_METRICS_NAME_FILTER_REGEX -> ${metricsNameFilterRegex.getOrElse("")}")
   logInfo(s"$KEY_LABELS -> ${labelsMap}")
   logInfo(s"$KEY_JMX_COLLECTOR_CONFIG -> $jmxCollectorConfig")
 
@@ -201,7 +209,9 @@ abstract class PrometheusSink(property: Properties,
 
   private val replace = metricsNameCaptureRegex.map(Replace(_, metricsNameReplacement))
 
-  lazy val sparkMetricExports = new SparkDropwizardExports(registry, replace, labelsMap, pushTimestamp)
+  private val filter = metricsNameFilterRegex.map(Filter)
+
+  lazy val sparkMetricExports = new SparkDropwizardExports(registry, replace, labelsMap, pushTimestamp, filter)
 
   lazy val jmxMetrics = new SparkJmxExports(new JmxCollector(new File(jmxCollectorConfig)), labelsMap, pushTimestamp)
 

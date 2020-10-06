@@ -36,7 +36,7 @@ class SparkCollectorDecoratorsSuite {
     val ts = new AtomicLong(0)
     val pushTs = PushTimestampDecorator.PushTimestampProvider(() => ts.incrementAndGet())
 
-    val metricsExports = new SparkDropwizardExports(registry, None, Map.empty, Some(pushTs))
+    val metricsExports = new SparkDropwizardExports(registry, None, Map.empty, Some(pushTs), None)
     metricsExports.register(pushRegistry)
 
     def testTimestampEqual() = {
@@ -55,7 +55,7 @@ class SparkCollectorDecoratorsSuite {
 
   @Test def testNoPushTimestamp(): Unit = new Fixture {
     // given
-    val metricsExports = new SparkDropwizardExports(registry, None, Map.empty, None)
+    val metricsExports = new SparkDropwizardExports(registry, None, Map.empty, None, None)
     val jmxMetricsExports = new SparkJmxExports(jmxCollector, Map.empty, None)
     metricsExports.register(pushRegistry)
     jmxMetricsExports.register(pushRegistry)
@@ -71,7 +71,7 @@ class SparkCollectorDecoratorsSuite {
   @Test def testNameReplace(): Unit = new Fixture { // given
     val metricsNameReplace = NameDecorator.Replace("(\\d+)".r, "__$1__")
 
-    val metricsExports = new SparkDropwizardExports(registry, Some(metricsNameReplace), Map.empty, None)
+    val metricsExports = new SparkDropwizardExports(registry, Some(metricsNameReplace), Map.empty, None, None)
     metricsExports.register(pushRegistry)
 
     // then
@@ -94,7 +94,7 @@ class SparkCollectorDecoratorsSuite {
   @Test def testStaticHelpMessage(): Unit = new Fixture { // given
     val staticTs = 1
 
-    val metricsExports = new SparkDropwizardExports(registry, None, Map.empty, None)
+    val metricsExports = new SparkDropwizardExports(registry, None, Map.empty, None, None)
     metricsExports.register(pushRegistry)
 
     // then
@@ -105,7 +105,7 @@ class SparkCollectorDecoratorsSuite {
   }
 
   @Test def testExtraLabels(): Unit = new Fixture { // given
-    val metricsExports = new SparkDropwizardExports(registry, None, extraLabels, None)
+    val metricsExports = new SparkDropwizardExports(registry, None, extraLabels, None, None)
     val jmxMetricsExports = new SparkJmxExports(jmxCollector, extraLabels, None)
     metricsExports.register(pushRegistry)
     jmxMetricsExports.register(pushRegistry)
@@ -119,6 +119,22 @@ class SparkCollectorDecoratorsSuite {
         Assert.assertTrue(sample.labelNames.asScala.toList.containsSlice(extraLabels.keys.toList))
         Assert.assertTrue(sample.labelValues.asScala.toList.containsSlice(extraLabels.values.toList))
       }
+    }
+  }
+
+  @Test def testNameFilter(): Unit = new Fixture { // given
+    val metricsNameFilter = FilterDecorator.Filter(".*2.*".r)
+
+    val metricsExports = new SparkDropwizardExports(registry, None, Map.empty, None, Some(metricsNameFilter))
+    metricsExports.register(pushRegistry)
+
+    // then
+    Assert.assertTrue(getExportedMetrics.size == 1)
+
+    val counterSamples = getCounterSamples
+    Assert.assertTrue(counterSamples.size == 1)
+    counterSamples.foreach { sample =>
+      Assert.assertTrue(s"[${sample.name}]", sample.name == "test_metric_sample__1__")
     }
   }
 }

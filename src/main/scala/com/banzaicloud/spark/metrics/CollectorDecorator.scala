@@ -12,8 +12,10 @@ import scala.collection.JavaConverters._
 object CollectorDecorator {
   case class FamilyBuilder(familyName : MetricFamilySamples => String = _.name,
                            helpMessage : MetricFamilySamples => String = _.help,
-                           sampleBuilder: SampleBuilder = SampleBuilder()) {
-    def build(mfs: MetricFamilySamples): MetricFamilySamples = {
+                           sampleBuilder: SampleBuilder = SampleBuilder(),
+                           keepFamily : MetricFamilySamples => Boolean = _ => true
+                          ) {
+    def build(mfs: MetricFamilySamples): Option[MetricFamilySamples] = if (keepFamily(mfs)) Some(
       new MetricFamilySamples(
         familyName(mfs),
         mfs.`type`,
@@ -23,7 +25,7 @@ object CollectorDecorator {
           .map(sampleBuilder.build(_))
           .asJava
       )
-    }
+    ) else None
   }
 
   case class SampleBuilder(sampleName : Sample => String = _.name,
@@ -54,6 +56,6 @@ abstract class CollectorDecorator(parent: Collector)
   protected def familyBuilder: FamilyBuilder = FamilyBuilder()
 
   protected def map(source: util.List[MetricFamilySamples], builder: FamilyBuilder) = {
-    source.asScala.toList.map(builder.build(_)).asJava
+    source.asScala.toList.flatMap(builder.build(_)).asJava
   }
 }
