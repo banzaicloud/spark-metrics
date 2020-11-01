@@ -27,13 +27,13 @@ import com.banzaicloud.spark.metrics.PushTimestampDecorator.PushTimestampProvide
 import com.banzaicloud.spark.metrics.{DeduplicatedCollectorRegistry, SparkDropwizardExports, SparkJmxExports}
 import com.codahale.metrics._
 import io.prometheus.client.{Collector, CollectorRegistry}
-import io.prometheus.client.dropwizard.DropwizardExports
 import io.prometheus.client.exporter.PushGateway
 import io.prometheus.jmx.JmxCollector
 import org.apache.spark.internal.Logging
 
 import scala.collection.JavaConverters._
 import scala.collection.immutable.ListMap
+import scala.collection.immutable
 import scala.util.Try
 import scala.util.matching.Regex
 
@@ -54,11 +54,11 @@ abstract class PrometheusSink(property: Properties,
 
   private val lbv = raw"(.+)\s*=\s*(.*)".r
 
-  protected class Reporter(registry: MetricRegistry)
+  protected class Reporter(registry: MetricRegistry, metricFilter: MetricFilter)
     extends ScheduledReporter(
       registry,
       "prometheus-reporter",
-      MetricFilter.ALL,
+      metricFilter,
       TimeUnit.SECONDS,
       TimeUnit.MILLISECONDS) {
 
@@ -121,9 +121,11 @@ abstract class PrometheusSink(property: Properties,
   val KEY_ENABLE_HOSTNAME_IN_INSTANCE = "enable-hostname-in-instance"
   val KEY_JMX_COLLECTOR_CONFIG = "jmx-collector-config"
 
- // labels
- val KEY_LABELS = "labels"
- val KEY_GROUP_KEY = "group-key"
+  val KEY_RE_METRICS_FILTER = "metrics-filter-([a-zA-Z][a-zA-Z0-9-]*)".r
+
+  // labels
+  val KEY_LABELS = "labels"
+  val KEY_GROUP_KEY = "group-key"
 
   val pollPeriod: Int =
     Option(property.getProperty(KEY_PUSH_PERIOD))
@@ -195,6 +197,13 @@ abstract class PrometheusSink(property: Properties,
   logInfo(s"$KEY_LABELS -> ${labelsMap}")
   logInfo(s"$KEY_JMX_COLLECTOR_CONFIG -> $jmxCollectorConfig")
 
+  val metricsFilterProps: Map[String, String] = property.stringPropertyNames().asScala
+    .collect { case qualifiedKey @ KEY_RE_METRICS_FILTER(key) =>
+      val value = property.getProperty(qualifiedKey)
+      logInfo(s"$qualifiedKey -> $value")
+      key -> value
+    }.toMap
+
   val pushRegistry: CollectorRegistry = new DeduplicatedCollectorRegistry()
 
   private val pushTimestamp = if (enableTimestamp) Some(PushTimestampProvider()) else None
@@ -207,7 +216,17 @@ abstract class PrometheusSink(property: Properties,
 
   val pushGateway: PushGateway = pushGatewayBuilder(new URL(s"$pushGatewayAddressProtocol://$pushGatewayAddress"))
 
-  val reporter = new Reporter(registry)
+  val metricsFilter: MetricFilter = metricsFilterProps.get("class")
+    .map { className =>
+      try {
+        instantiateMetricFilter(className, metricsFilterProps - "class")
+      } catch {
+        case ex: Exception => throw new RuntimeException(s"Exception occurred while creating MetricFilter instance: ${ex.getMessage}", ex)
+      }
+    }
+    .getOrElse(MetricFilter.ALL)
+
+  val reporter = new Reporter(registry, metricsFilter)
 
   def start(): Unit = {
     if (enableDropwizardCollector) {
@@ -291,5 +310,52 @@ abstract class PrometheusSink(property: Properties,
       case _ =>
         ListMap("role" -> role)
     }
+  }
+
+  private def instantiateMetricFilter(className: String, props: Map[String, String]): MetricFilter = {
+    val cls = Class.forName(className)
+
+    if (!classOf[MetricFilter].isAssignableFrom(cls)) {
+      throw new RuntimeException(s"${cls.getName} is not a subclass of ${classOf[MetricFilter].getName}")
+    }
+
+    val constructors = cls.getConstructors()
+
+    if (constructors.isEmpty) {
+      throw new RuntimeException(s"${cls.getName} has no public constructors.")
+    }
+
+    def maybeCallScalaMapConstructor = constructors.collectFirst {
+      case c if c.getParameterCount == 1 &&
+        classOf[immutable.Map[_,_]].isAssignableFrom(c.getParameterTypes()(0)) => c.newInstance(props).asInstanceOf[MetricFilter]
+    }
+
+    def maybeCallJavaMapConstructor = constructors.collectFirst {
+      case c if c.getParameterCount == 1 &&
+        classOf[util.Map[_,_]].isAssignableFrom(c.getParameterTypes()(0)) => c.newInstance(props.asJava).asInstanceOf[MetricFilter]
+    }
+
+    def maybeCallPropertiesConstructor = constructors.collectFirst {
+      case c if c.getParameterCount == 1 &&
+        classOf[Properties].isAssignableFrom(c.getParameterTypes()(0)) =>
+        val javaProps = new Properties()
+        javaProps.putAll(props.asJava)
+        c.newInstance(javaProps).asInstanceOf[MetricFilter]
+    }
+
+    def maybeCallNoArgConstructor = constructors.collectFirst {
+      case c if c.getParameterCount == 0 => {
+        if (props.nonEmpty) {
+          logWarning(s"Instantiating ${cls.getName} with default constructor. All properties are discarded!")
+        }
+        c.newInstance().asInstanceOf[MetricFilter]
+      }
+    }
+
+    maybeCallScalaMapConstructor
+      .orElse(maybeCallJavaMapConstructor)
+      .orElse(maybeCallPropertiesConstructor)
+      .orElse(maybeCallNoArgConstructor)
+      .getOrElse(throw new RuntimeException(s"No applicable constructor found in ${cls.getName}"))
   }
 }
