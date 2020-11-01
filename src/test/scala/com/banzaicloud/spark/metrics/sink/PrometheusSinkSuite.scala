@@ -6,7 +6,7 @@ import java.util.Properties
 import java.util.concurrent.CopyOnWriteArrayList
 
 import com.banzaicloud.spark.metrics.sink.PrometheusSink.SinkConfig
-import com.codahale.metrics.MetricRegistry
+import com.codahale.metrics.{Metric, MetricFilter, MetricRegistry}
 import io.prometheus.client.CollectorRegistry
 import io.prometheus.client.exporter.PushGateway
 import org.apache.spark.banzaicloud.metrics.sink.{PrometheusSink => SparkPrometheusSink}
@@ -21,19 +21,24 @@ class PrometheusSinkSuite {
                             sparkAppName: Option[String],
                             executorId: Option[String]) extends SinkConfig
 
-  private val properties = new Properties
-  properties.setProperty("enable-jmx-collector", "true")
-  properties.setProperty("labels", "a=1,b=22")
-  properties.setProperty("period", "1")
-  properties.setProperty("group-key", "key1=AA,key2=BB")
-  properties.setProperty("jmx-collector-config", "/dev/null")
+
+  val basicProperties = {
+    val properties = new Properties
+    properties.setProperty("enable-jmx-collector", "true")
+    properties.setProperty("labels", "a=1,b=22")
+    properties.setProperty("period", "1")
+    properties.setProperty("group-key", "key1=AA,key2=BB")
+    properties.setProperty("jmx-collector-config", "/dev/null")
+    properties
+  }
+
 
   trait Fixture {
     def sinkConfig = TestSinkConfig(Some("test-job-name"), Some("test-app-id"), Some("test-app-name"), None)
     lazy val pgMock = new PushGatewayMock
     lazy val registry = new MetricRegistry
 
-    def withSink[T](fn: (SparkPrometheusSink) => T): Unit = {
+    def withSink[T](properties: Properties = basicProperties)(fn: (SparkPrometheusSink) => T): Unit = {
       // Given
       val sink = new SparkPrometheusSink(properties, registry, null, sinkConfig, _ => pgMock)
       try {
@@ -52,7 +57,7 @@ class PrometheusSinkSuite {
     override val sinkConfig = super.sinkConfig.copy(executorId = Some("driver"))
 
     registry.counter("test-counter").inc(3)
-    withSink { sink =>
+    withSink() { sink =>
       //Then
       Assert.assertTrue(pgMock.requests.size == 1)
       val request = pgMock.requests.head
@@ -62,7 +67,9 @@ class PrometheusSinkSuite {
       Assert.assertTrue(
         request.registry.metricFamilySamples().asScala.exists(_.name == "jmx_config_reload_success_total")
       )
-
+      Assert.assertTrue(
+        sink.metricsFilter == MetricFilter.ALL
+      )
     }
   }
 
@@ -73,7 +80,7 @@ class PrometheusSinkSuite {
 
     registry.counter("test-counter").inc(3)
 
-    withSink { sink =>
+    withSink() { sink =>
       //Then
       Assert.assertTrue(pgMock.requests.size == 1)
       val request = pgMock.requests.head
@@ -90,6 +97,9 @@ class PrometheusSinkSuite {
       }
       Assert.assertTrue(
         families.exists(_.name == "jmx_config_reload_success_total")
+      )
+      Assert.assertTrue(
+        sink.metricsFilter == MetricFilter.ALL
       )
     }
   }
