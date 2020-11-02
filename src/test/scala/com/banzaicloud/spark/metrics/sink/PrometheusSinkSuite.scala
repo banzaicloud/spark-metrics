@@ -6,6 +6,7 @@ import java.util.Properties
 import java.util.concurrent.CopyOnWriteArrayList
 
 import com.banzaicloud.spark.metrics.sink.PrometheusSink.SinkConfig
+import com.banzaicloud.spark.metrics.sink.PrometheusSinkSuite.{DefaultConstr, JavaMapConstr, PropertiesConstr, ScalaMapConstr}
 import com.codahale.metrics.{Metric, MetricFilter, MetricRegistry}
 import io.prometheus.client.CollectorRegistry
 import io.prometheus.client.exporter.PushGateway
@@ -104,6 +105,34 @@ class PrometheusSinkSuite {
     }
   }
 
+  @Test
+  def testMetricsFilterInstantiation(): Unit = new Fixture {
+
+    def testMetricPropertySet(tests: (Class[_], MetricFilter => Any)*) = for {(cls, getter) <- tests} withSink({
+      val properties = new Properties()
+      properties.put("metrics-filter-class", cls)
+      properties.put("metrics-filter-key", "value")
+      properties
+    }) { sink =>
+      Assert.assertEquals(cls, sink.metricsFilter.getClass)
+      Assert.assertEquals("value", getter(sink.metricsFilter))
+    }
+
+    testMetricPropertySet(
+      (classOf[PropertiesConstr], _.asInstanceOf[PropertiesConstr].props.get("key")),
+      (classOf[JavaMapConstr], _.asInstanceOf[JavaMapConstr].props.get("key")),
+      (classOf[ScalaMapConstr], _.asInstanceOf[ScalaMapConstr].props("key")),
+    )
+
+    withSink({
+      val properties = new Properties()
+      properties.put("metrics-filter-class", classOf[DefaultConstr])
+      properties
+    }) { sink =>
+      Assert.assertEquals(classOf[DefaultConstr], sink.metricsFilter.getClass)
+    }
+  }
+
   class PushGatewayMock extends PushGateway("anything") {
     val requests = new CopyOnWriteArrayList[Request]().asScala
     case class Request(registry: CollectorRegistry, job: String, groupingKey: util.Map[String, String], method: String)
@@ -142,4 +171,18 @@ class PrometheusSinkSuite {
       requests += Request(registry, job, groupingKey, method)
     }
   }
+}
+
+object PrometheusSinkSuite {
+  trait NoOpMetricFilter extends MetricFilter {
+    override def matches(name: String, metric: Metric): Boolean = false
+  }
+
+  class DefaultConstr extends NoOpMetricFilter
+
+  class PropertiesConstr(val props: Properties) extends NoOpMetricFilter
+
+  class JavaMapConstr(val props: util.Map[String, String]) extends NoOpMetricFilter
+
+  class ScalaMapConstr(val props: Map[String, String]) extends NoOpMetricFilter
 }
