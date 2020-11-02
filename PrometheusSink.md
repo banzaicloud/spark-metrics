@@ -44,6 +44,10 @@ Add the following lines to metrics configuration file:
 # Enable JVM metrics source for all instances by class name
 *.sink.jmx.class=org.apache.spark.metrics.sink.JmxSink
 *.source.jvm.class=org.apache.spark.metrics.source.JvmSource
+
+# Use custom metric filter
+*.sink.prometheus.metrics-filter-class=com.example.RegexMetricFilter
+*.sink.prometheus.metrics-filter-regex=com.example\.(.*)
 ```
 
 * **pushgateway-address-protocol** - the scheme of the URL where pushgateway service is available
@@ -60,6 +64,10 @@ Please note that `instance` name change between application executions, so pushg
 * **enable-dropwizard-collector** - from version 2.3-2.0.0 you can enable/disable dropwizard collector
 * **enable-jmx-collector** - from version 2.3-2.0.0 you can enable/disable JMX collector which collects configure metrics from JMX
 * **jmx-collector-config** - the location of jmx collector config file
+* **metrics-filter-class** - optional MetricFilter implementation to filter metrics to report. By default, all metrics are reported.
+* **metrics-filter-&lt;key&gt;** - configuration option passed to the metric filter's constructor. See more on this below.
+
+#### JMX configuration
 
 Example JMX collector configuration file:
 
@@ -70,6 +78,21 @@ Example JMX collector configuration file:
 ```
 
 You can find more detailed description on this configuration file [here](https://github.com/prometheus/jmx_exporter).
+
+#### Metrics filtering
+
+It is possible to provide a custom class implementing [`com.codahale.metrics.MetricFilter`](https://metrics.dropwizard.io/3.1.0/apidocs/com/codahale/metrics/MetricFilter.html)
+for filtering metrics to report. The qualified class name should be specified with the **metrics-filter-class** configuration option.
+The class must have a public constructor taking either
+ - `scala.collection.immutable.Map[String, String]`
+ - `java.util.Map[String, String]`
+ - `java.util.Properties`.
+ 
+Properties matching **metrics-filter-&lt;key&gt;** are passed as key-value pairs to an applicable constructor during
+instantiation. Additionally, if we can't find any of the above, the public no-arg constructor is tried, but in this case
+no configuration can be passed.
+  
+#### Deploying
 
 `spark-submit` needs to know repository where to download the `jar` containing PrometheusSink from:
 
