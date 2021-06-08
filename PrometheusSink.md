@@ -125,7 +125,6 @@ _**Note**_: the `--packages` option currently is not supported by _**Spark 2.3 w
    1. mvn dependency:copy-dependencies -f ~/.m2/repository/com/banzaicloud/spark-metrics_2.11/${SPARK_METRICS_VERSION}/spark-metrics_2.11-${SPARK_METRICS_VERSION}.pom -DoutputDirectory=$(pwd)/temp
    1. cp temp/* assembly/target/scala-2.11/jars
    
-
 ### Build fat jar
 In the case when you want to add spark-metrics jar into your classpath you can build it locally to include all needed dependencies using the following command: 
 ```sh
