@@ -339,7 +339,7 @@ abstract class PrometheusSink(property: Properties,
       case c if c.getParameterCount == 1 &&
         classOf[Properties].isAssignableFrom(c.getParameterTypes()(0)) =>
         val javaProps = new Properties()
-        javaProps.putAll(props.asJava)
+        javaProps.asScala ++= props
         c.newInstance(javaProps).asInstanceOf[MetricFilter]
     }
 
