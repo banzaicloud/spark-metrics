@@ -41,7 +41,7 @@ class PrometheusSinkSuite {
 
     def withSink[T](properties: Properties = basicProperties)(fn: (SparkPrometheusSink) => T): Unit = {
       // Given
-      val sink = new SparkPrometheusSink(properties, registry, null, sinkConfig, _ => pgMock)
+      val sink = new SparkPrometheusSink(properties, registry, sinkConfig, _ => pgMock)
       try {
       //When
         sink.start()

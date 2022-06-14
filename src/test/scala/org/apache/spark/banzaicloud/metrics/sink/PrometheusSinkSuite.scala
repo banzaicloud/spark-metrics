@@ -1,7 +1,7 @@
 package org.apache.spark.banzaicloud.metrics.sink
 
 import org.apache.spark.metrics.MetricsSystem
-import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.{SparkConf}
 import org.junit.{After, Before, Test}
 
 class PrometheusSinkSuite {
@@ -12,8 +12,7 @@ class PrometheusSinkSuite {
   def testThatPrometheusSinkCanBeLoaded() = {
     val instance = "driver"
     val conf = new SparkConf(true)
-    val sm = new SecurityManager(conf)
-    val ms = MetricsSystem.createMetricsSystem(instance, conf, sm)
+    val ms = MetricsSystem.createMetricsSystem(instance, conf)
     ms.start()
     ms.stop()
   }
