@@ -4,7 +4,7 @@ import java.net.URL
 import java.util.Properties
 
 import com.banzaicloud.spark.metrics.sink.PrometheusSink.SinkConfig
-import com.codahale.metrics.{MetricFilter, MetricRegistry}
+import com.codahale.metrics.{MetricRegistry}
 import io.prometheus.client.exporter.PushGateway
 import org.apache.spark.banzaicloud.metrics.sink.PrometheusSink.SinkConfigProxy
 import org.apache.spark.internal.config
@@ -29,20 +29,23 @@ object PrometheusSink {
 
 class PrometheusSink(property: Properties,
                      registry: MetricRegistry,
-                     securityMgr: SecurityManager,
                      sinkConfig: SinkConfig,
                      pushGatewayBuilder: URL => PushGateway
                     )
   extends com.banzaicloud.spark.metrics.sink.PrometheusSink(property, registry, sinkConfig, pushGatewayBuilder) with Sink {
 
-  // Constructor required by MetricsSystem::registerSinks()
-  def this(property: Properties, registry: MetricRegistry, securityMgr: SecurityManager) = {
+  // Constructor required by MetricsSystem::registerSinks() for spark >= 3.2
+  def this(property: Properties, registry: MetricRegistry) = {
     this(
       property,
       registry,
-      securityMgr,
       new SinkConfigProxy,
       new PushGateway(_)
-    )
+      )
+  }
+
+  // Legacy Constructor required by MetricsSystem::registerSinks() for spark < 3.2
+  def this(property: Properties, registry: MetricRegistry, securityMgr: SecurityManager) = {
+    this(property, registry)
   }
 }

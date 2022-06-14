@@ -121,6 +121,12 @@ Also we have to specify the spark-metrics package that includes PrometheusSink a
 ```sh
 --packages com.banzaicloud:spark-metrics_2.12:3.1-1.0.0,io.prometheus:simpleclient:0.11.0,io.prometheus:simpleclient_dropwizard:0.11.0,io.prometheus:simpleclient_pushgateway:0.11.0,io.prometheus:simpleclient_common:0.11.0,io.prometheus.jmx:collector:0.15.0
 ```
+
+* Spark 3.2:
+
+```sh
+--packages com.banzaicloud:spark-metrics_2.12:3.2-1.0.0,io.prometheus:simpleclient:0.15.0,io.prometheus:simpleclient_dropwizard:0.15.0,io.prometheus:simpleclient_pushgateway:0.15.0,io.prometheus:simpleclient_common:0.15.0,io.prometheus.jmx:collector:0.17.0
+```
 _**Note**_: the `--packages` option currently is not supported by _**Spark 2.3 when running on Kubernetes**_. The reason is that the `--packages` option behind the scenes downloads the files from maven repo to local machines than uploads these to the cluster using _Local File Dependency Management_ feature. This feature has not been backported from the _**Spark 2.2 on Kubernetes**_ fork to _**Spark 2.3**_. See details here: [Spark 2.3 Future work](https://spark.apache.org/docs/latest/running-on-kubernetes.html#future-work). This can be worked around by:
 1. building ourselves [Spark 2.3 with Kubernetes support](https://spark.apache.org/docs/latest/building-spark.html#building-with-kubernetes-support) from source
 1. downloading and adding the dependencies to `assembly/target/scala-2.11/jars` folder, by running the following commands:
@@ -136,7 +142,7 @@ In the case when you want to add spark-metrics jar into your classpath you can b
 ```sh
 sbt assembly
 ```
-After assembling just add resulting ``spark-metrics-assembly-3.1-1.0.0.jar`` into your Spark classpath (e.g. `$SPARK_HOME/jars/`).
+After assembling just add resulting ``spark-metrics-assembly-3.2-1.0.0.jar`` into your Spark classpath (e.g. `$SPARK_HOME/jars/`).
 
 #### Package version
 
